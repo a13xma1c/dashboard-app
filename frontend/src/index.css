@@ -1,19 +1,82 @@
+:root {
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --border: #e5e7eb;
+  --border-strong: #d0d7de;
+  --text: #1f2328;
+  --text-muted: #57606a;
+  --text-subtle: #8b949e;
+  --primary: #3b82d4;
+  --primary-hover: #2d6fbf;
+  --primary-soft: #e8f1fb;
+  --success: #10b981;
+  --danger: #e53e3e;
+  --warning: #f59e0b;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --sidebar-width: 220px;
+  --header-height: 56px;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
 }
 
 body {
   margin: 0;
   font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
   font-size: 14px;
-  color: #1f2328;
-  background: #f7f8fa;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1, h2, h3, h4, h5, h6, p {
   margin: 0;
 }
 
-p {
-  margin: 0;
+button, input, select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Recharts tooltip polish */
+.recharts-default-tooltip {
+  border-radius: var(--radius-sm) !important;
+  border-color: var(--border) !important;
+  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
+  font-size: 12px;
 }

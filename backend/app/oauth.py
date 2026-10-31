@@ -1,8 +1,12 @@
 """
 OAuth 2.0 helpers — build the authorization URL and exchange the code for tokens.
 """
-import os
+from __future__ import annotations
+
+from fastapi import HTTPException
 from google_auth_oauthlib.flow import Flow
+
+from app.config import Settings
 
 SCOPES = [
     "openid",
@@ -12,22 +16,29 @@ SCOPES = [
 ]
 
 
-def _client_config() -> dict:
+def _client_config(settings: Settings) -> dict[str, dict[str, object]]:
+    if not settings.google_client_id or not settings.google_client_secret:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Google OAuth is not configured. Set GOOGLE_CLIENT_ID and "
+                "GOOGLE_CLIENT_SECRET, or enable GA_MOCK_MODE for local development."
+            ),
+        )
     return {
         "web": {
-            "client_id": os.environ["GOOGLE_CLIENT_ID"],
-            "client_secret": os.environ["GOOGLE_CLIENT_SECRET"],
-            "redirect_uris": [os.environ["GOOGLE_REDIRECT_URI"]],
+            "client_id": settings.google_client_id,
+            "client_secret": settings.google_client_secret,
+            "redirect_uris": [settings.google_redirect_uri],
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
         }
     }
 
 
-def build_flow() -> Flow:
-    flow = Flow.from_client_config(
-        _client_config(),
+def build_flow(settings: Settings) -> Flow:
+    return Flow.from_client_config(
+        _client_config(settings),
         scopes=SCOPES,
-        redirect_uri=os.environ["GOOGLE_REDIRECT_URI"],
+        redirect_uri=settings.google_redirect_uri,
     )
-    return flow

@@ -49,3 +49,13 @@
 .button:hover {
   background: #f7f8fa;
 }
+
+.error {
+  font-size: 13px;
+  color: var(--danger);
+  margin: -16px 0 20px;
+}
+
+.button:disabled {
+  opacity: 0.7;
+}

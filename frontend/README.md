@@ -1,32 +1,62 @@
-# React + TypeScript + Vite
+# GA Dashboard — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React 19 + TypeScript + Vite. Charts with Recharts, data fetching with TanStack Query, routing with React Router.
 
-Currently, two official plugins are available:
+## Scripts
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+| Command | What it does |
+|---------|--------------|
+| `npm run dev` | Start the dev server on http://localhost:5173 |
+| `npm run build` | Type-check and build for production |
+| `npm run preview` | Serve the production build |
+| `npm run lint` | Run oxlint |
+| `npm test` | Run the Vitest suite once |
+| `npm run test:watch` | Run Vitest in watch mode |
+| `npm run test:coverage` | Run the suite with a V8 coverage report (`coverage/`) |
 
-## React Compiler
+## Environment
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Copy `.env.example` to `.env` (or `.env.local`) and adjust:
 
-## Expanding the Oxlint configuration
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VITE_API_URL` | `http://localhost:8000` | Base URL of the FastAPI backend |
+| `VITE_MOCK_API` | `false` | `true` = no backend at all; every call is answered by the in-browser mock generator in `src/mocks` |
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+## Structure
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```
+src/
+├── api/            Axios client, typed API functions, wire types
+├── mocks/          Deterministic mock GA data generator + mock API implementation
+├── lib/            Pure helpers: formatting, report parsing, dates, CSV
+├── context/        Auth + dashboard (property / date range) providers
+├── hooks/          useReport / useSummary / useCustomReport / useMetadata, useDrilldown
+├── components/
+│   ├── ui/         WidgetCard, KpiCard, DateRangePicker, PropertySelector, controls
+│   ├── charts/     TimeSeriesChart, BreakdownPie, BreakdownBar
+│   └── tables/     DataTable (sort / search / paginate / select), ReportTable
+├── layouts/        DashboardLayout (sidebar + header) and nav config
+└── pages/          Overview, Audience, Acquisition, Content, Geography, Explore, Login
+
+tests/              Vitest suite — kept entirely outside src/
+├── setup.ts        jsdom polyfills, jest-dom matchers, Recharts ResponsiveContainer stub
+├── helpers/
+│   ├── render.tsx          renderWithProviders(), test QueryClient, makeReport()
+│   └── mockAnalytics.ts    vi.fn-wrapped mock API used in place of src/api/analytics
+└── <mirrors src/>  api/, components/, context/, hooks/, layouts/, lib/, mocks/, pages/, App.test.tsx
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Testing
+
+Tests live in `tests/`, mirroring the `src/` tree, and import application code
+through the `@/` alias (`@tests/` for helpers). Component and page tests render
+against the deterministic mock API via
+
+```ts
+vi.mock("@/api/analytics", () => import("@tests/helpers/mockAnalytics"));
+```
+
+so they never touch the network and every number is stable. Type-checking of
+the tests is wired into `tsc -b` through `tsconfig.test.json`, while
+`tsconfig.app.json` (used for the production build) only sees `src/`.

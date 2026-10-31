@@ -1,0 +1,171 @@
+/* Small shared controls: segmented control, chips, selects, buttons */
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.segment {
+  border: none;
+  background: transparent;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-right: 1px solid var(--border);
+}
+
+.segment:last-child {
+  border-right: none;
+}
+
+.segment:hover {
+  background: var(--bg);
+}
+
+.segmentActive {
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.chip:hover {
+  border-color: var(--border-strong);
+}
+
+.chipActive {
+  color: var(--text);
+  border-color: var(--chip-color, var(--primary));
+  background: color-mix(in srgb, var(--chip-color, var(--primary)) 10%, white);
+}
+
+.chipDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--chip-color, var(--primary));
+  opacity: 0.35;
+}
+
+.chipActive .chipDot {
+  opacity: 1;
+}
+
+.select {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  font-size: 12px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.input {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface);
+  outline: none;
+}
+
+.input:focus {
+  border-color: var(--primary);
+}
+
+.button {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.button:hover {
+  background: var(--bg);
+}
+
+.buttonPrimary {
+  composes: button;
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.buttonPrimary:hover {
+  background: var(--primary-hover);
+}
+
+.buttonSmall {
+  padding: 4px 9px;
+  font-size: 12px;
+}
+
+.filterPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, white);
+  border-radius: 999px;
+  padding: 3px 6px 3px 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.filterPillClear {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 4px;
+  border-radius: 50%;
+}
+
+.filterPillClear:hover {
+  background: rgba(59, 130, 212, 0.15);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--text-subtle);
+}

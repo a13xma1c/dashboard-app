@@ -17,4 +17,31 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = []
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "httpx>=0.28.0",
+    "mypy>=1.13",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+filterwarnings = [
+    "ignore::DeprecationWarning:starlette.testclient",
+    "ignore:You are using a Python version:FutureWarning",
+]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["app", "tests"]
+# Google client libraries ship without complete type information.
+[[tool.mypy.overrides]]
+module = ["google.*", "google_auth_oauthlib.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["app.providers", "tests.test_google_provider"]
+disallow_untyped_calls = false
