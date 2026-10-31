@@ -1,6 +1,6 @@
 # Convenience targets for the whole repo. Each sub-project also works standalone.
 
-.PHONY: install dev backend frontend test test-backend test-frontend test-e2e lint clean
+.PHONY: install dev backend frontend test test-backend test-frontend test-e2e lint clean up down logs redis
 
 install:            ## Install backend (uv) and frontend (npm) dependencies
 	cd backend && uv sync
@@ -14,6 +14,19 @@ frontend:           ## Run the Vite dev server on :5173
 
 dev:                ## Run backend (mock mode) and frontend together
 	$(MAKE) -j2 backend frontend
+
+up:                 ## Build and run the full stack in containers (redis + backend + frontend)
+	docker compose up --build -d
+	@echo "→ http://localhost:$${FRONTEND_PORT:-5173}"
+
+down:               ## Stop and remove the containers
+	docker compose down
+
+logs:               ## Tail container logs
+	docker compose logs -f
+
+redis:              ## Run only the Redis cache container (for a locally-run backend: REDIS_URL=redis://localhost:6379/0)
+	docker compose up -d redis
 
 lint:               ## Static checks: ruff + mypy, oxlint + tsc
 	cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy

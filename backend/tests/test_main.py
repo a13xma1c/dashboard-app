@@ -7,15 +7,17 @@ from app.factory import create_app
 
 
 def test_health_reports_mock_mode(client: TestClient) -> None:
-    assert client.get("/health").json() == {"status": "ok", "version": "2.0.0", "mock_mode": True}
+    body = client.get("/health").json()
+    assert body["status"] == "ok"
+    assert body["mock_mode"] is True
+    assert body["cache"]["backend"] == "memory"
+    assert body["cache"]["reachable"] is True
 
 
 def test_health_in_real_mode(real_app: FastAPI) -> None:
-    assert TestClient(real_app).get("/health").json() == {
-        "status": "ok",
-        "version": "2.0.0",
-        "mock_mode": False,
-    }
+    body = TestClient(real_app).get("/health").json()
+    assert body["mock_mode"] is False
+    assert body["version"] == "2.1.0"
 
 
 def test_cors_allows_frontend_origin_with_credentials(client: TestClient) -> None:

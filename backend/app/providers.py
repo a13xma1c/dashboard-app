@@ -34,7 +34,7 @@ from google.api_core.exceptions import GoogleAPIError
 from google.auth.transport.requests import Request as GoogleRequest
 from google.oauth2.credentials import Credentials
 
-from app.cache import TTLCache, make_key
+from app.cache import ReportCache, make_key
 from app.config import Settings
 from app.mock_data import MockAnalyticsProvider
 
@@ -103,20 +103,12 @@ def credentials_from_session(session: dict[str, Any]) -> Credentials:
 class GoogleAnalyticsProvider:
     name = "google"
 
-    def __init__(
-        self,
-        credentials: Credentials,
-        client: BetaAnalyticsDataClient | None = None,
-        cache: TTLCache[ReportResult] | None = None,
-        cache_identity: str = "",
-    ):
+    def __init__(self, credentials: Credentials, client: BetaAnalyticsDataClient | None = None):
         # Use the REST transport explicitly — avoids gRPC channel issues with
         # short-lived OAuth user credentials and removes the need for grpcio.
         self._client = client or BetaAnalyticsDataClient(
             transport=BetaAnalyticsDataRestTransport(credentials=credentials)
         )
-        self._cache = cache
-        self._cache_identity = cache_identity
 
     def run_report(
         self,
@@ -128,19 +120,6 @@ class GoogleAnalyticsProvider:
         dimension_filter: tuple[str, str] | None = None,
         limit: int = 1000,
     ) -> ReportResult:
-        cache_key = make_key(
-            self._cache_identity,
-            property_id=property_id,
-            dimensions=dimensions,
-            metrics=metrics,
-            start_date=start_date,
-            end_date=end_date,
-            dimension_filter=dimension_filter,
-            limit=limit,
-        )
-        if self._cache is not None and (cached := self._cache.get(cache_key)) is not None:
-            return cached
-
         req = RunReportRequest(
             property=f"properties/{property_id}",
             dimensions=[Dimension(name=d) for d in dimensions],
@@ -165,10 +144,7 @@ class GoogleAnalyticsProvider:
             logger.error("GA API error: %s", exc)
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-        result = serialize_response(response)
-        if self._cache is not None:
-            self._cache.set(cache_key, result)
-        return result
+        return serialize_response(response)
 
 
 def serialize_response(response: Any) -> ReportResult:
@@ -181,15 +157,64 @@ def serialize_response(response: Any) -> ReportResult:
     return {"headers": headers, "rows": rows}
 
 
+# ── Caching wrapper ───────────────────────────────────────────────────────────
+
+
+class CachedReportProvider:
+    """
+    Decorates any ``ReportProvider`` with the report cache. Keys include an
+    opaque per-user identity so cached data is never shared between users.
+    """
+
+    def __init__(self, inner: ReportProvider, cache: ReportCache, identity: str):
+        self._inner = inner
+        self._cache = cache
+        self._identity = identity
+        self.name = inner.name
+
+    def run_report(
+        self,
+        property_id: str,
+        dimensions: list[str],
+        metrics: list[str],
+        start_date: str = "30daysAgo",
+        end_date: str = "today",
+        dimension_filter: tuple[str, str] | None = None,
+        limit: int = 1000,
+    ) -> ReportResult:
+        key = make_key(
+            self._identity,
+            provider=self._inner.name,
+            property_id=property_id,
+            dimensions=dimensions,
+            metrics=metrics,
+            start_date=start_date,
+            end_date=end_date,
+            dimension_filter=dimension_filter,
+            limit=limit,
+        )
+        cached = self._cache.get(key)
+        if cached is not None:
+            return cached
+        result = self._inner.run_report(
+            property_id,
+            dimensions=dimensions,
+            metrics=metrics,
+            start_date=start_date,
+            end_date=end_date,
+            dimension_filter=dimension_filter,
+            limit=limit,
+        )
+        self._cache.set(key, result)
+        return result
+
+
 # ── Dependency ────────────────────────────────────────────────────────────────
 
 
-def get_report_cache(request: Request) -> TTLCache[ReportResult]:
-    """One process-wide cache per app instance, created lazily from settings."""
-    cache: TTLCache[ReportResult] | None = getattr(request.app.state, "report_cache", None)
-    if cache is None:
-        cache = TTLCache(ttl_seconds=get_settings(request).report_cache_ttl)
-        request.app.state.report_cache = cache
+def get_report_cache(request: Request) -> ReportCache:
+    """The cache built by the app factory (see ``create_app``)."""
+    cache: ReportCache = request.app.state.report_cache
     return cache
 
 
@@ -202,12 +227,13 @@ def cache_identity(session: dict[str, Any]) -> str:
 def get_provider(
     session: dict[str, Any] = Depends(require_session),
     settings: Settings = Depends(get_settings),
-    cache: TTLCache[ReportResult] = Depends(get_report_cache),
+    cache: ReportCache = Depends(get_report_cache),
 ) -> ReportProvider:
+    inner: ReportProvider
     if settings.mock_mode:
-        return MockAnalyticsProvider(today=settings.mock_today)
-    return GoogleAnalyticsProvider(
-        credentials_from_session(session),
-        cache=cache,
-        cache_identity=cache_identity(session),
-    )
+        inner = MockAnalyticsProvider(today=settings.mock_today)
+    else:
+        inner = GoogleAnalyticsProvider(credentials_from_session(session))
+    if not cache.enabled:
+        return inner
+    return CachedReportProvider(inner, cache, cache_identity(session))

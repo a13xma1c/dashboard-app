@@ -15,19 +15,21 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
+from app.cache import ReportCache, build_cache
 from app.config import Settings
 from app.routers import analytics, auth
 
 logger = logging.getLogger(__name__)
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, cache: ReportCache | None = None) -> FastAPI:
     if settings is None:
         load_dotenv()
         settings = Settings.from_env()
 
-    app = FastAPI(title="GA Dashboard API", version="2.0.0")
+    app = FastAPI(title="GA Dashboard API", version="2.1.0")
     app.state.settings = settings
+    app.state.report_cache = cache or build_cache(settings.report_cache_ttl, settings.redis_url)
 
     # Middleware is applied in LIFO order by Starlette.
     # CORS must be the outermost layer so preflight requests are handled before
@@ -51,7 +53,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/health")
     def health() -> dict[str, object]:
-        return {"status": "ok", "version": app.version, "mock_mode": settings.mock_mode}
+        report_cache: ReportCache = app.state.report_cache
+        return {
+            "status": "ok",
+            "version": app.version,
+            "mock_mode": settings.mock_mode,
+            "cache": {**report_cache.stats(), "reachable": report_cache.ping()},
+        }
 
     if settings.mock_mode:
         logger.warning("GA_MOCK_MODE is enabled — serving generated analytics data.")

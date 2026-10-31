@@ -27,7 +27,30 @@ numbers are generated.
 > Want to skip the backend entirely? `VITE_MOCK_API=true npm run dev` serves the same
 > mock data from inside the browser.
 
+### …or run everything in containers
+
+```bash
+cp .env.example .env          # optional: tweak ports / secrets
+docker compose up --build     # Redis cache + API + nginx-served UI
+```
+
+Open http://localhost:5173. `GET http://localhost:8000/health` shows the cache backend
+(`redis`) and hit/miss counters.
+
 ---
+
+## Architecture
+
+```
+ browser ──► frontend (nginx, :5173) ──► backend (FastAPI, :8000) ──► Google Analytics Data API
+                                              │                           (or the mock provider)
+                                              └──► redis (:6379) — report cache, TTL + LRU
+```
+
+Every report request is wrapped by a cache keyed on *(user, query)*. With Redis configured
+(`REDIS_URL`, set automatically by compose) the cache is shared across backend replicas and
+survives restarts; without it an in-process cache is used. Redis outages are fail-soft: the
+backend logs and falls through to the data source.
 
 ## Dashboards
 
@@ -84,9 +107,12 @@ make install      # uv sync + npm install
 make dev          # backend (mock mode) + frontend together
 make lint         # ruff · mypy · oxlint · tsc
 make test         # lint + backend + frontend + e2e
+make up / down    # full stack in Docker (redis + backend + frontend)
+make redis        # only the Redis container, for a locally-run backend
 ```
 
-CI (`.github/workflows/ci.yml`) runs the same three stages on every push / PR.
+CI (`.github/workflows/ci.yml`) runs backend, frontend, container build + smoke test, and
+Playwright stages on every push / PR.
 
 ## Testing
 
@@ -110,11 +136,14 @@ Google credentials are ever needed. See `backend/README.md` and `frontend/README
 
 ```
 DashboardApp/
+├── docker-compose.yml           # redis + backend + frontend
 ├── backend/
+│   ├── Dockerfile               # uv-built venv on python:3.12-slim, non-root
 │   ├── app/
 │   │   ├── main.py              # ASGI entry point
 │   │   ├── factory.py           # create_app(settings)
-│   │   ├── config.py            # Settings from env (GA_MOCK_MODE, secrets, origins)
+│   │   ├── config.py            # Settings from env (GA_MOCK_MODE, REDIS_URL, secrets, origins)
+│   │   ├── cache.py             # ReportCache protocol: RedisCache / MemoryCache
 │   │   ├── dates.py             # GA date syntax, DateRange, previous period
 │   │   ├── mock_data.py         # Deterministic mock GA generator
 │   │   ├── providers.py         # ReportProvider: Google + Mock, dependency injection
@@ -124,6 +153,7 @@ DashboardApp/
 │   ├── tests/                   # pytest suite
 │   └── pyproject.toml
 └── frontend/
+    ├── Dockerfile               # Vite build → nginx (SPA fallback, asset caching)
     ├── src/
     │   ├── api/                 # Axios client + typed API (live or mock)
     │   ├── mocks/               # In-browser mock GA generator + mock API
@@ -152,7 +182,8 @@ DashboardApp/
 | `FRONTEND_ORIGIN` | CORS origin of the React dev server (default `http://localhost:5173`) |
 | `CORS_ORIGINS` | Optional extra comma-separated origins |
 | `SESSION_HTTPS_ONLY` | `true` to mark the session cookie `Secure` (use behind HTTPS) |
-| `REPORT_CACHE_TTL` | Seconds to cache identical GA report requests per user (default `300`, `0` disables) |
+| `REPORT_CACHE_TTL` | Seconds to cache identical report requests per user (default `300`, `0` disables) |
+| `REDIS_URL` | Redis URL for a shared cache (e.g. `redis://localhost:6379/0`); unset → in-memory cache |
 | `MOCK_TODAY` | `YYYY-MM-DD` to freeze "today" in mock mode for reproducible demos |
 
 ### Frontend
