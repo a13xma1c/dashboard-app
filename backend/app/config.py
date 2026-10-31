@@ -41,8 +41,10 @@ class Settings:
     session_https_only: bool = False
     #: Freeze "today" for the mock provider (reproducible demos / screenshots).
     mock_today: date | None = None
-    #: Seconds to cache Google report responses per user; 0 disables caching.
+    #: Seconds to cache report responses per user; 0 disables caching.
     report_cache_ttl: int = 300
+    #: Redis connection URL for a shared cache (e.g. ``redis://redis:6379/0``); unset = in-memory.
+    redis_url: str | None = None
 
     @property
     def allowed_origins(self) -> list[str]:
@@ -103,4 +105,5 @@ class Settings:
             session_https_only=_as_bool(source.get("SESSION_HTTPS_ONLY")),
             mock_today=mock_today,
             report_cache_ttl=report_cache_ttl,
+            redis_url=source.get("REDIS_URL", "").strip() or None,
         )

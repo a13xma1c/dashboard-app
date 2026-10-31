@@ -9,7 +9,10 @@ test.describe("backend API contract", () => {
   test("health reports mock mode", async ({ request }) => {
     const res = await request.get(`${BACKEND_URL}/health`);
     expect(res.ok()).toBe(true);
-    expect(await res.json()).toEqual({ status: "ok", version: expect.any(String), mock_mode: true });
+    const body = await res.json();
+    expect(body).toMatchObject({ status: "ok", version: expect.any(String), mock_mode: true });
+    expect(body.cache).toMatchObject({ enabled: true, reachable: true });
+    expect(["memory", "redis"]).toContain(body.cache.backend);
   });
 
   test("analytics endpoints require a session", async ({ request }) => {
@@ -39,6 +42,17 @@ test.describe("backend API contract", () => {
 
     await request.post(`${BACKEND_URL}/auth/logout`);
     expect((await (await request.get(`${BACKEND_URL}/auth/me`)).json()).authenticated).toBe(false);
+  });
+
+  test("repeat report requests are served from the cache", async ({ request }) => {
+    await request.get(`${BACKEND_URL}/auth/login`, { maxRedirects: 0 });
+    const before = (await (await request.get(`${BACKEND_URL}/health`)).json()).cache.hits as number;
+    const url = `${BACKEND_URL}/analytics/devices/424242?start_date=2025-03-01&end_date=2025-03-07`;
+    const first = await (await request.get(url)).json();
+    const second = await (await request.get(url)).json();
+    expect(second).toEqual(first);
+    const after = (await (await request.get(`${BACKEND_URL}/health`)).json()).cache.hits as number;
+    expect(after).toBeGreaterThanOrEqual(before + 1);
   });
 
   test("rejects bad input with helpful errors", async ({ request }) => {

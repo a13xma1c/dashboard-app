@@ -1,0 +1,11 @@
+node_modules
+dist
+coverage
+test-results
+playwright-report
+e2e
+tests
+playwright.config.ts
+.env
+.env.local
+README.md

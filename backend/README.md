@@ -30,11 +30,25 @@ In mock mode:
 
 * After OAuth the user's email is fetched from Google's `userinfo` endpoint and
   shown in the header (best-effort; login still succeeds if it fails).
-* Identical report requests by the same user are cached in memory for
-  `REPORT_CACHE_TTL` seconds (default 300) to conserve GA Data API quota.
-  Cache entries are keyed by a hash of the user's credentials, never shared.
+* Identical report requests by the same user are cached for `REPORT_CACHE_TTL`
+  seconds (default 300) to conserve GA Data API quota. Cache entries are keyed
+  by a hash of the user's credentials, never shared between users.
 * Set `SESSION_HTTPS_ONLY=true` in production so the session cookie is `Secure`.
 * `property_id` path parameters must be numeric; anything else is rejected with 422.
+
+## Report cache
+
+`app/cache.py` defines a small `ReportCache` protocol with two backends:
+
+| Backend | When | Notes |
+|---|---|---|
+| `RedisCache` | `REDIS_URL` is set | Shared across processes/replicas, survives restarts. JSON values stored with `SET … EX`; keys namespaced `ga:report:*`. Fail-soft: Redis errors are logged and treated as misses. If Redis is unreachable at start-up the app logs an error and falls back to memory. |
+| `MemoryCache` | otherwise | In-process TTL + LRU (512 entries). |
+
+`CachedReportProvider` wraps whichever data provider is active (Google or mock),
+so the cache behaves identically in both modes. `GET /health` reports the backend,
+reachability and hit/miss counters. Run just the cache locally with `make redis`
+(or `docker compose up -d redis`) and set `REDIS_URL=redis://localhost:6379/0`.
 
 ## Endpoints
 
@@ -77,7 +91,7 @@ app/
 ├── main.py          ASGI entry point (uvicorn app.main:app)
 ├── factory.py       create_app(settings) — testable application factory
 ├── config.py        Settings loaded from the environment
-├── cache.py         TTL/LRU cache for Google report responses
+├── cache.py         ReportCache protocol, RedisCache, MemoryCache, build_cache()
 ├── dates.py         GA relative-date parsing, DateRange, previous period
 ├── mock_data.py     Deterministic mock GA generator (MockAnalyticsProvider)
 ├── providers.py     ReportProvider protocol, GoogleAnalyticsProvider, DI

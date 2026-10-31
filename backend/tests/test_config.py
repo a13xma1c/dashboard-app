@@ -75,8 +75,10 @@ def test_new_settings_parse_from_env() -> None:
             "SESSION_HTTPS_ONLY": "true",
             "MOCK_TODAY": "2025-03-15",
             "REPORT_CACHE_TTL": "42",
+            "REDIS_URL": " redis://cache:6379/0 ",
         }
     )
+    assert s.redis_url == "redis://cache:6379/0"
     assert s.session_https_only is True
     assert s.mock_today is not None and s.mock_today.isoformat() == "2025-03-15"
     assert s.report_cache_ttl == 42
@@ -87,6 +89,7 @@ def test_new_settings_defaults() -> None:
     assert s.session_https_only is False
     assert s.mock_today is None
     assert s.report_cache_ttl == 300
+    assert s.redis_url is None
 
 
 def test_invalid_mock_today_is_rejected() -> None:

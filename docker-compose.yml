@@ -1,0 +1,68 @@
+# Full stack: Redis report cache + FastAPI backend + nginx-served frontend.
+#
+#   docker compose up --build          # mock data (default) → http://localhost:5173
+#   GA_MOCK_MODE=false docker compose up --build   # real GA (needs Google creds in .env)
+#
+# Copy .env.example to .env to set secrets; compose reads it automatically.
+
+name: ga-dashboard
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: ga-redis
+    # Cache semantics: no persistence, bounded memory, evict least-recently-used keys.
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --maxmemory
+      - "${REDIS_MAXMEMORY:-128mb}"
+      - --maxmemory-policy
+      - allkeys-lru
+    ports:
+      - "${REDIS_PORT:-6379}:6379" # exposed so a locally-run backend can use it too
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+    container_name: ga-backend
+    environment:
+      GA_MOCK_MODE: ${GA_MOCK_MODE:-true}
+      MOCK_TODAY: ${MOCK_TODAY:-}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      SESSION_HTTPS_ONLY: ${SESSION_HTTPS_ONLY:-false}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:8000/auth/callback}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      REDIS_URL: redis://redis:6379/0
+      REPORT_CACHE_TTL: ${REPORT_CACHE_TTL:-300}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Must be reachable from the *browser*, hence localhost rather than the service name.
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    container_name: ga-frontend
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
