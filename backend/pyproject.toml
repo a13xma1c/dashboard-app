@@ -1,0 +1,20 @@
+[project]
+name = "ga-dashboard-backend"
+version = "0.1.0"
+description = "Google Analytics Dashboard — FastAPI backend"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi==0.115.5",
+    "uvicorn[standard]==0.32.1",
+    "google-auth==2.36.0",
+    "google-auth-oauthlib==1.2.1",
+    "google-analytics-data==0.18.14",
+    "python-dotenv==1.0.1",
+    "httpx==0.28.0",
+    "itsdangerous==2.2.0",
+    "starlette==0.41.3",
+]
+
+[dependency-groups]
+dev = []
