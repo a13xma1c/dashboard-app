@@ -2,6 +2,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
 import { DashboardProvider } from "@/context/DashboardProvider";
 import { createTestQueryClient } from "@tests/helpers/render";
 import { fetchCustomReport, fetchMetadata, fetchReport, fetchSummary, resetMockAnalytics } from "@tests/helpers/mockAnalytics";
@@ -12,9 +13,11 @@ vi.mock("@/api/analytics", () => import("@tests/helpers/mockAnalytics"));
 function wrapper(propertyId = "123") {
   return ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={createTestQueryClient()}>
-      <DashboardProvider initialPropertyId={propertyId} initialDateRange={{ start: "2025-03-01", end: "2025-03-07" }}>
-        {children}
-      </DashboardProvider>
+      <MemoryRouter>
+        <DashboardProvider initialPropertyId={propertyId} initialDateRange={{ start: "2025-03-01", end: "2025-03-07" }}>
+          {children}
+        </DashboardProvider>
+      </MemoryRouter>
     </QueryClientProvider>
   );
 }

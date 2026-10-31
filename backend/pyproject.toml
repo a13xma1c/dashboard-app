@@ -22,6 +22,7 @@ dev = [
     "pytest-cov>=6.0",
     "httpx>=0.28.0",
     "mypy>=1.13",
+    "ruff>=0.8",
 ]
 
 [tool.pytest.ini_options]
@@ -45,3 +46,17 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = ["app.providers", "tests.test_google_provider"]
 disallow_untyped_calls = false
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["RUF012", "RUF002", "RUF003"]  # × in docs/comments is intentional
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]

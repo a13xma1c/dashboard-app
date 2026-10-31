@@ -1,6 +1,9 @@
 import "@testing-library/jest-dom/vitest";
 import { afterEach, vi } from "vitest";
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
+
+// findBy*/waitFor default to 1s; lazy-loaded pages + chart rendering can exceed that on slow machines.
+configure({ asyncUtilTimeout: 5_000 });
 
 afterEach(() => {
   cleanup();

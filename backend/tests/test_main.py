@@ -7,11 +7,15 @@ from app.factory import create_app
 
 
 def test_health_reports_mock_mode(client: TestClient) -> None:
-    assert client.get("/health").json() == {"status": "ok", "mock_mode": True}
+    assert client.get("/health").json() == {"status": "ok", "version": "2.0.0", "mock_mode": True}
 
 
 def test_health_in_real_mode(real_app: FastAPI) -> None:
-    assert TestClient(real_app).get("/health").json() == {"status": "ok", "mock_mode": False}
+    assert TestClient(real_app).get("/health").json() == {
+        "status": "ok",
+        "version": "2.0.0",
+        "mock_mode": False,
+    }
 
 
 def test_cors_allows_frontend_origin_with_credentials(client: TestClient) -> None:
@@ -70,3 +74,14 @@ def test_main_module_exposes_configured_app(monkeypatch: pytest.MonkeyPatch) -> 
 
     reloaded = importlib.reload(main_module)
     assert reloaded.app.title == "GA Dashboard API"
+
+
+def test_session_cookie_secure_flag_is_configurable() -> None:
+    app = create_app(Settings(session_secret="s", mock_mode=True, session_https_only=True))
+    response = TestClient(app, base_url="https://testserver").get("/auth/login", follow_redirects=False)
+    assert "secure" in response.headers["set-cookie"].lower()
+
+
+def test_session_cookie_not_secure_by_default(client: TestClient) -> None:
+    response = client.get("/auth/login", follow_redirects=False)
+    assert "secure" not in response.headers["set-cookie"].lower()

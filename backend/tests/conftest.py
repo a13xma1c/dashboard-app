@@ -6,6 +6,7 @@ Shared fixtures.
 * ``real_app`` — app with mock mode OFF, for exercising the Google code paths
   with fakes injected via ``dependency_overrides``.
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterator

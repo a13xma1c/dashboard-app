@@ -1,12 +1,20 @@
 """
 OAuth 2.0 helpers — build the authorization URL and exchange the code for tokens.
 """
+
 from __future__ import annotations
 
+import logging
+
+import httpx
 from fastapi import HTTPException
 from google_auth_oauthlib.flow import Flow
 
 from app.config import Settings
+
+logger = logging.getLogger(__name__)
+
+USERINFO_ENDPOINT = "https://openidconnect.googleapis.com/v1/userinfo"
 
 SCOPES = [
     "openid",
@@ -42,3 +50,24 @@ def build_flow(settings: Settings) -> Flow:
         scopes=SCOPES,
         redirect_uri=settings.google_redirect_uri,
     )
+
+
+def fetch_user_email(access_token: str, timeout: float = 5.0) -> str | None:
+    """
+    Look up the signed-in user's email via the OpenID ``userinfo`` endpoint.
+
+    Best-effort: the dashboard works without it, so any failure is logged and
+    ``None`` is returned rather than blocking the login.
+    """
+    try:
+        response = httpx.get(
+            USERINFO_ENDPOINT,
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        email = response.json().get("email")
+        return email if isinstance(email, str) and email else None
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("Could not fetch user info: %s", exc)
+        return None

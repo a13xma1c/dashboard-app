@@ -1,7 +1,8 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import type { ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { checkAuth, login as apiLogin, logout as apiLogout } from "../api/analytics";
+import { UNAUTHORIZED_EVENT } from "../api/client";
 import type { AuthStatus } from "../api/types";
 import { AUTH_QUERY_KEY, AuthContext } from "./AuthContext";
 
@@ -34,6 +35,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }));
     // Drop cached reports so the next user doesn't see stale data.
     queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== "auth" });
+  }, [queryClient]);
+
+  // Session expired server-side (401 from a report) → mark as signed out locally.
+  useEffect(() => {
+    const onUnauthorized = () => {
+      queryClient.setQueryData(AUTH_QUERY_KEY, (prev: AuthStatus | undefined) => ({
+        ...LOGGED_OUT,
+        mock_mode: prev?.mock_mode ?? false,
+      }));
+      queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== "auth" });
+    };
+    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
   }, [queryClient]);
 
   const data = status.isError ? LOGGED_OUT : status.data;

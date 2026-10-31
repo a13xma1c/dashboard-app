@@ -15,3 +15,9 @@ export const NAV_ITEMS: NavItem[] = [
 ];
 
 export const DEFAULT_PAGE = NAV_ITEMS[0].path;
+
+/** True when `pathname` is one of the dashboard page routes (not a redirecting path). */
+export function isPagePath(pathname: string): boolean {
+  const normalised = pathname.replace(/\/+$/, "");
+  return NAV_ITEMS.some((item) => normalised === `/dashboard/${item.path}`);
+}

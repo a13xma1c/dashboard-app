@@ -5,6 +5,7 @@ GA accepts ``today``, ``yesterday``, ``NdaysAgo`` and ``YYYY-MM-DD``.  The mock
 provider needs concrete dates to enumerate rows, and the summary endpoint needs
 to compute the "previous period" for period-over-period comparisons.
 """
+
 from __future__ import annotations
 
 import re
@@ -40,9 +41,7 @@ def resolve_date(value: str, today: date | None = None) -> date:
         except ValueError as exc:
             raise InvalidDateError(f"Invalid date: {value!r}") from exc
 
-    raise InvalidDateError(
-        f"Invalid date {value!r}. Use YYYY-MM-DD, 'today', 'yesterday' or 'NdaysAgo'."
-    )
+    raise InvalidDateError(f"Invalid date {value!r}. Use YYYY-MM-DD, 'today', 'yesterday' or 'NdaysAgo'.")
 
 
 @dataclass(frozen=True)
@@ -52,12 +51,10 @@ class DateRange:
 
     def __post_init__(self) -> None:
         if self.start > self.end:
-            raise InvalidDateError(
-                f"start_date ({self.start}) must not be after end_date ({self.end})"
-            )
+            raise InvalidDateError(f"start_date ({self.start}) must not be after end_date ({self.end})")
 
     @classmethod
-    def parse(cls, start: str, end: str, today: date | None = None) -> "DateRange":
+    def parse(cls, start: str, end: str, today: date | None = None) -> DateRange:
         return cls(resolve_date(start, today), resolve_date(end, today))
 
     @property
@@ -69,7 +66,7 @@ class DateRange:
         for i in range(self.days):
             yield self.start + timedelta(days=i)
 
-    def previous(self) -> "DateRange":
+    def previous(self) -> DateRange:
         """The range of equal length immediately preceding this one."""
         end = self.start - timedelta(days=1)
         start = end - timedelta(days=self.days - 1)

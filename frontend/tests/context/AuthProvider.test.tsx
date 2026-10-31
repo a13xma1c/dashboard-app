@@ -6,6 +6,7 @@ import { AuthProvider } from "@/context/AuthProvider";
 import { useAuth } from "@/hooks/useAuth";
 import { createTestQueryClient } from "@tests/helpers/render";
 import { checkAuth, login, logout, mockApi, resetMockAnalytics } from "@tests/helpers/mockAnalytics";
+import { UNAUTHORIZED_EVENT } from "@/api/client";
 
 vi.mock("@/api/analytics", () => import("@tests/helpers/mockAnalytics"));
 
@@ -64,6 +65,18 @@ describe("AuthProvider", () => {
     await waitFor(() => expect(result.current.authenticated).toBe(false));
     expect(result.current.email).toBeNull();
     expect(result.current.mockMode).toBe(true); // preserved so the login page can show demo copy
+    expect(queryClient.getQueryData(["report", "x"])).toBeUndefined();
+  });
+
+  it("signs out locally when the API reports an expired session", async () => {
+    await mockApi.login();
+    const { result, queryClient } = setup();
+    await waitFor(() => expect(result.current.authenticated).toBe(true));
+
+    act(() => window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT)));
+
+    await waitFor(() => expect(result.current.authenticated).toBe(false));
+    expect(result.current.mockMode).toBe(true);
     expect(queryClient.getQueryData(["report", "x"])).toBeUndefined();
   });
 

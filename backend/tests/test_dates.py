@@ -39,7 +39,7 @@ def test_date_range_parse_and_days() -> None:
     assert r.start == date(2025, 3, 8)
     assert r.end == TODAY
     assert r.days == 8
-    assert list(r.iter_days())[0] == r.start
+    assert next(iter(r.iter_days())) == r.start
     assert list(r.iter_days())[-1] == r.end
     assert len(list(r.iter_days())) == 8
 

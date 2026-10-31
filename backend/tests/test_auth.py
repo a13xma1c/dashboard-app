@@ -1,4 +1,5 @@
 """Auth router — mock mode short-circuit and the real OAuth code paths."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -9,8 +10,8 @@ from fastapi.testclient import TestClient
 from app.config import Settings
 from app.factory import create_app
 
-
 # ── Mock mode ─────────────────────────────────────────────────────────────────
+
 
 def test_me_unauthenticated_reports_mock_mode(client: TestClient) -> None:
     body = client.get("/auth/me").json()
@@ -48,6 +49,7 @@ def test_login_redirect_uses_configured_frontend_origin() -> None:
 
 
 # ── Real mode ─────────────────────────────────────────────────────────────────
+
 
 def test_me_in_real_mode(real_app: FastAPI) -> None:
     body = TestClient(real_app).get("/auth/me").json()
@@ -88,9 +90,7 @@ def test_callback_without_prior_login_is_rejected(real_app: FastAPI) -> None:
 
 
 def test_callback_with_error_param_redirects_to_login_page(real_app: FastAPI) -> None:
-    response = TestClient(real_app).get(
-        "/auth/callback?error=access_denied", follow_redirects=False
-    )
+    response = TestClient(real_app).get("/auth/callback?error=access_denied", follow_redirects=False)
     assert response.status_code == 307
     assert response.headers["location"] == "http://localhost:5173/?error=access_denied"
 
@@ -120,10 +120,35 @@ def test_successful_callback_stores_credentials_in_session(real_app: FastAPI) ->
     fake_flow = MagicMock()
     fake_flow.credentials = fake_creds
 
-    with patch("app.routers.auth.build_flow", return_value=fake_flow):
+    with (
+        patch("app.routers.auth.build_flow", return_value=fake_flow),
+        patch("app.routers.auth.fetch_user_email", return_value="user@example.com") as fetch_email,
+    ):
         response = client.get(f"/auth/callback?code=the-code&state={state}", follow_redirects=False)
 
     fake_flow.fetch_token.assert_called_once_with(code="the-code")
+    fetch_email.assert_called_once_with("access-token")
     assert response.status_code == 307
     assert response.headers["location"].endswith("/dashboard")
-    assert client.get("/auth/me").json()["authenticated"] is True
+    me = client.get("/auth/me").json()
+    assert me["authenticated"] is True
+    assert me["email"] == "user@example.com"
+
+
+def test_callback_succeeds_even_if_userinfo_lookup_fails(real_app: FastAPI) -> None:
+    client = TestClient(real_app)
+    login = client.get("/auth/login", follow_redirects=False)
+    state = login.headers["location"].split("state=")[1].split("&")[0]
+    fake_flow = MagicMock()
+    fake_flow.credentials = MagicMock(
+        token="t", refresh_token=None, token_uri="u", client_id="c", client_secret="s", scopes=[]
+    )
+
+    with (
+        patch("app.routers.auth.build_flow", return_value=fake_flow),
+        patch("app.routers.auth.fetch_user_email", return_value=None),
+    ):
+        client.get(f"/auth/callback?code=x&state={state}", follow_redirects=False)
+
+    me = client.get("/auth/me").json()
+    assert me == {"authenticated": True, "mock_mode": False, "email": None}

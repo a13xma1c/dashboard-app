@@ -5,14 +5,16 @@ In mock mode ``/auth/login`` simply marks the session as authenticated and
 redirects back to the frontend, so the whole app can be exercised without
 Google credentials.
 """
+
 from __future__ import annotations
+
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from typing import Any
 
 from app.config import Settings
-from app.oauth import build_flow
+from app.oauth import build_flow, fetch_user_email
 from app.providers import get_settings
 from app.schemas import AuthStatus
 
@@ -78,6 +80,7 @@ def callback(
     request.session["client_id"] = credentials.client_id
     request.session["client_secret"] = credentials.client_secret
     request.session["scopes"] = list(credentials.scopes or [])
+    request.session["email"] = fetch_user_email(credentials.token)
 
     return RedirectResponse(_dashboard_url(settings))
 

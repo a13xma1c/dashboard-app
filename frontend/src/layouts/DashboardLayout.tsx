@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useDashboard } from "../hooks/useDashboard";
+import { useLastUpdated } from "../hooks/useLastUpdated";
 import Badge from "../components/ui/Badge";
 import DateRangePicker from "../components/ui/DateRangePicker";
 import PropertySelector from "../components/ui/PropertySelector";
@@ -9,13 +11,21 @@ import styles from "./DashboardLayout.module.css";
 
 export default function DashboardLayout() {
   const { logout, mockMode, email } = useAuth();
-  const { propertyId, setPropertyId, dateRange, setDateRange, ready } = useDashboard();
+  const { propertyId, setPropertyId, dateRange, setDateRange } = useDashboard();
   const location = useLocation();
+  const { isRefreshing, label: updatedLabel, refresh } = useLastUpdated();
 
   const current = NAV_ITEMS.find((item) => location.pathname.includes(`/dashboard/${item.path}`)) ?? NAV_ITEMS[0];
 
+  useEffect(() => {
+    document.title = `${current.label} · GA Dashboard`;
+  }, [current.label]);
+
   return (
     <div className={styles.shell}>
+      <a href="#main-content" className={styles.skipLink}>
+        Skip to content
+      </a>
       <aside className={styles.sidebar}>
         <div className={styles.brand}>
           <span className={styles.brandMark} aria-hidden="true">
@@ -28,7 +38,8 @@ export default function DashboardLayout() {
           {NAV_ITEMS.map((item) => (
             <NavLink
               key={item.path}
-              to={`/dashboard/${item.path}`}
+              // Carry the query string so property / date range survive navigation.
+              to={{ pathname: `/dashboard/${item.path}`, search: location.search }}
               className={({ isActive }) => [styles.navLink, isActive ? styles.navLinkActive : ""].join(" ")}
               title={item.description}
             >
@@ -51,6 +62,19 @@ export default function DashboardLayout() {
           <div className={styles.headerRight}>
             <PropertySelector value={propertyId} onChange={setPropertyId} compact />
             <DateRangePicker value={dateRange} onChange={setDateRange} />
+            <button
+              type="button"
+              className={styles.refreshBtn}
+              onClick={() => void refresh()}
+              disabled={isRefreshing}
+              title={updatedLabel ? `Data updated ${updatedLabel}` : "Refresh data"}
+              aria-label="Refresh data"
+            >
+              <RefreshIcon spinning={isRefreshing} />
+              <span className={styles.updated} aria-live="polite">
+                {isRefreshing ? "Refreshing…" : updatedLabel ? `Updated ${updatedLabel}` : "Refresh"}
+              </span>
+            </button>
             {email && <span className={styles.email}>{email}</span>}
             <button type="button" className={styles.logoutBtn} onClick={() => void logout()}>
               Sign out
@@ -58,23 +82,28 @@ export default function DashboardLayout() {
           </div>
         </header>
 
-        {ready ? (
-          <main className={styles.main}>
-            <Outlet />
-          </main>
-        ) : (
-          <div className={styles.empty}>
-            <span className={styles.emptyTitle}>Connect a GA4 property</span>
-            <p>Enter your GA4 Property ID above to load the dashboards.</p>
-            <p className={styles.hint}>
-              Find it in Google Analytics → Admin → Property Settings → Property ID.
-              {mockMode && " In demo mode any number works — try 123456789."}
-            </p>
-            <PropertySelector value={propertyId} onChange={setPropertyId} />
-          </div>
-        )}
+        <Outlet />
       </div>
     </div>
+  );
+}
+
+function RefreshIcon({ spinning }: { spinning: boolean }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      className={spinning ? styles.spin : undefined}
+      aria-hidden="true"
+    >
+      <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" />
+      <path d="M13.5 2.5v3h-3" />
+    </svg>
   );
 }
 

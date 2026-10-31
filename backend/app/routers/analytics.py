@@ -10,23 +10,30 @@ Every report endpoint accepts the same query parameters:
 
 All endpoints require an authenticated session (enforced by ``get_provider``).
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from datetime import date
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
+from app.config import Settings
 from app.dates import DateRange, InvalidDateError
-from app.mock_data import UnsupportedFieldError, metadata as field_metadata
-from app.providers import ReportProvider, get_provider
+from app.mock_data import UnsupportedFieldError
+from app.mock_data import metadata as field_metadata
+from app.providers import ReportProvider, get_provider, get_settings
 from app.schemas import ReportResponse, SummaryResponse
 
 router = APIRouter()
 
 MAX_LIMIT = 10_000
 MAX_CUSTOM_FIELDS = 5
+
+#: GA4 property IDs are numeric (e.g. ``123456789``); reject anything else before it reaches Google.
+PropertyId = Annotated[str, Path(pattern=r"^\d{1,20}$", description="Numeric GA4 property ID")]
 
 # Metrics included in the period-over-period summary.
 SUMMARY_METRICS = [
@@ -41,6 +48,7 @@ SUMMARY_METRICS = [
 
 # ── Shared query parameters ───────────────────────────────────────────────────
 
+
 @dataclass
 class ReportParams:
     start_date: str = "30daysAgo"
@@ -48,6 +56,8 @@ class ReportParams:
     filter_dimension: str | None = None
     filter_value: str | None = None
     limit: int = 1000
+    #: Reference date for relative ranges; ``None`` = the real clock. Set in mock mode via MOCK_TODAY.
+    today: date | None = None
 
     @property
     def dimension_filter(self) -> tuple[str, str] | None:
@@ -62,19 +72,20 @@ def report_params(
     filter_dimension: str | None = Query(None, description="Dimension to filter on (exact match)"),
     filter_value: str | None = Query(None, description="Value the filter dimension must equal"),
     limit: int = Query(1000, ge=1, le=MAX_LIMIT),
+    settings: Settings = Depends(get_settings),
 ) -> ReportParams:
+    today = settings.mock_today if settings.mock_mode else None
+
     # Validate dates up-front so every endpoint returns a consistent 400.
     try:
-        DateRange.parse(start_date, end_date)
+        DateRange.parse(start_date, end_date, today)
     except InvalidDateError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if filter_value is not None and not filter_dimension:
-        raise HTTPException(
-            status_code=400, detail="filter_value requires filter_dimension"
-        )
+        raise HTTPException(status_code=400, detail="filter_value requires filter_dimension")
 
-    return ReportParams(start_date, end_date, filter_dimension, filter_value, limit)
+    return ReportParams(start_date, end_date, filter_dimension, filter_value, limit, today)
 
 
 def _run(
@@ -102,6 +113,7 @@ def _run(
 
 # ── Metadata ──────────────────────────────────────────────────────────────────
 
+
 @router.get("/metadata")
 def metadata(_: ReportProvider = Depends(get_provider)) -> dict[str, Any]:
     """Dimensions and metrics available to the custom report builder."""
@@ -110,19 +122,24 @@ def metadata(_: ReportProvider = Depends(get_provider)) -> dict[str, Any]:
 
 # ── Summary (KPIs with period-over-period comparison) ─────────────────────────
 
+
 @router.get("/summary/{property_id}", response_model=SummaryResponse)
 def summary(
-    property_id: str,
+    property_id: PropertyId,
     params: ReportParams = Depends(report_params),
     provider: ReportProvider = Depends(get_provider),
 ) -> dict[str, Any]:
     """Headline metrics for the selected range and the equal-length preceding range."""
-    current_range = DateRange.parse(params.start_date, params.end_date)
+    current_range = DateRange.parse(params.start_date, params.end_date, params.today)
     previous_range = current_range.previous()
 
     current = _run(provider, property_id, [], SUMMARY_METRICS, params)
     previous = _run(
-        provider, property_id, [], SUMMARY_METRICS, params,
+        provider,
+        property_id,
+        [],
+        SUMMARY_METRICS,
+        params,
         start_date=previous_range.start.isoformat(),
         end_date=previous_range.end.isoformat(),
     )
@@ -141,7 +158,7 @@ def _totals(report: dict[str, Any]) -> dict[str, float]:
     headers: list[str] = report["headers"]
     rows: list[list[str]] = report["rows"]
     values = rows[0] if rows else ["0"] * len(headers)
-    return {h: _to_number(v) for h, v in zip(headers, values)}
+    return {h: _to_number(v) for h, v in zip(headers, values, strict=True)}
 
 
 def _to_number(value: str) -> float:
@@ -155,12 +172,13 @@ def _to_number(value: str) -> float:
 # Each endpoint is a fixed (dimensions, metrics) pair; the date range and
 # optional filter come from the shared query parameters.
 
+
 def _standard_report(
     path: str, dimensions: list[str], metrics: list[str], doc: str
 ) -> Callable[..., dict[str, Any]]:
     @router.get(f"/{path}/{{property_id}}", response_model=ReportResponse, name=path)
     def endpoint(
-        property_id: str,
+        property_id: PropertyId,
         params: ReportParams = Depends(report_params),
         provider: ReportProvider = Depends(get_provider),
     ) -> dict[str, Any]:
@@ -253,9 +271,10 @@ hourly = _standard_report(
 
 # ── Custom report ─────────────────────────────────────────────────────────────
 
+
 @router.get("/custom/{property_id}", response_model=ReportResponse)
 def custom(
-    property_id: str,
+    property_id: PropertyId,
     dimensions: str = Query("date", description="Comma-separated dimension names"),
     metrics: str = Query("sessions", description="Comma-separated metric names"),
     params: ReportParams = Depends(report_params),

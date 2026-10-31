@@ -10,8 +10,10 @@ Report providers — the single seam between the HTTP layer and the data source.
 ``get_provider`` is a FastAPI dependency that picks one based on settings, so
 routers never know which backend they're talking to and tests can override it.
 """
+
 from __future__ import annotations
 
+import hashlib
 import logging
 from typing import Any, Protocol
 
@@ -32,6 +34,7 @@ from google.api_core.exceptions import GoogleAPIError
 from google.auth.transport.requests import Request as GoogleRequest
 from google.oauth2.credentials import Credentials
 
+from app.cache import TTLCache, make_key
 from app.config import Settings
 from app.mock_data import MockAnalyticsProvider
 
@@ -56,6 +59,7 @@ class ReportProvider(Protocol):
 
 
 # ── Session helpers ───────────────────────────────────────────────────────────
+
 
 def get_settings(request: Request) -> Settings:
     settings: Settings = request.app.state.settings
@@ -88,24 +92,31 @@ def credentials_from_session(session: dict[str, Any]) -> Credentials:
             session["token"] = creds.token
         except Exception as exc:  # google-auth raises a variety of exception types
             logger.warning("Token refresh failed: %s", exc)
-            raise HTTPException(
-                status_code=401, detail="Session expired — please log in again"
-            ) from exc
+            raise HTTPException(status_code=401, detail="Session expired — please log in again") from exc
 
     return creds
 
 
 # ── Google provider ───────────────────────────────────────────────────────────
 
+
 class GoogleAnalyticsProvider:
     name = "google"
 
-    def __init__(self, credentials: Credentials, client: BetaAnalyticsDataClient | None = None):
+    def __init__(
+        self,
+        credentials: Credentials,
+        client: BetaAnalyticsDataClient | None = None,
+        cache: TTLCache[ReportResult] | None = None,
+        cache_identity: str = "",
+    ):
         # Use the REST transport explicitly — avoids gRPC channel issues with
         # short-lived OAuth user credentials and removes the need for grpcio.
         self._client = client or BetaAnalyticsDataClient(
             transport=BetaAnalyticsDataRestTransport(credentials=credentials)
         )
+        self._cache = cache
+        self._cache_identity = cache_identity
 
     def run_report(
         self,
@@ -117,6 +128,19 @@ class GoogleAnalyticsProvider:
         dimension_filter: tuple[str, str] | None = None,
         limit: int = 1000,
     ) -> ReportResult:
+        cache_key = make_key(
+            self._cache_identity,
+            property_id=property_id,
+            dimensions=dimensions,
+            metrics=metrics,
+            start_date=start_date,
+            end_date=end_date,
+            dimension_filter=dimension_filter,
+            limit=limit,
+        )
+        if self._cache is not None and (cached := self._cache.get(cache_key)) is not None:
+            return cached
+
         req = RunReportRequest(
             property=f"properties/{property_id}",
             dimensions=[Dimension(name=d) for d in dimensions],
@@ -141,14 +165,15 @@ class GoogleAnalyticsProvider:
             logger.error("GA API error: %s", exc)
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-        return serialize_response(response)
+        result = serialize_response(response)
+        if self._cache is not None:
+            self._cache.set(cache_key, result)
+        return result
 
 
 def serialize_response(response: Any) -> ReportResult:
     """Flatten a ``RunReportResponse`` into ``{"headers": [...], "rows": [[...]]}``."""
-    headers = [h.name for h in response.dimension_headers] + [
-        h.name for h in response.metric_headers
-    ]
+    headers = [h.name for h in response.dimension_headers] + [h.name for h in response.metric_headers]
     rows = [
         [dv.value for dv in row.dimension_values] + [mv.value for mv in row.metric_values]
         for row in response.rows
@@ -158,10 +183,31 @@ def serialize_response(response: Any) -> ReportResult:
 
 # ── Dependency ────────────────────────────────────────────────────────────────
 
+
+def get_report_cache(request: Request) -> TTLCache[ReportResult]:
+    """One process-wide cache per app instance, created lazily from settings."""
+    cache: TTLCache[ReportResult] | None = getattr(request.app.state, "report_cache", None)
+    if cache is None:
+        cache = TTLCache(ttl_seconds=get_settings(request).report_cache_ttl)
+        request.app.state.report_cache = cache
+    return cache
+
+
+def cache_identity(session: dict[str, Any]) -> str:
+    """Opaque, stable identifier for the signed-in user — never the raw token."""
+    raw = session.get("refresh_token") or session.get("token") or ""
+    return hashlib.sha256(str(raw).encode()).hexdigest()
+
+
 def get_provider(
     session: dict[str, Any] = Depends(require_session),
     settings: Settings = Depends(get_settings),
+    cache: TTLCache[ReportResult] = Depends(get_report_cache),
 ) -> ReportProvider:
     if settings.mock_mode:
-        return MockAnalyticsProvider()
-    return GoogleAnalyticsProvider(credentials_from_session(session))
+        return MockAnalyticsProvider(today=settings.mock_today)
+    return GoogleAnalyticsProvider(
+        credentials_from_session(session),
+        cache=cache,
+        cache_identity=cache_identity(session),
+    )

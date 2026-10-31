@@ -24,6 +24,17 @@ In mock mode:
   series; cities roll up into their countries) and realistic (weekly
   seasonality, trend, noise).
 * `SESSION_SECRET` may be omitted — an insecure development secret is used.
+* Set `MOCK_TODAY=2025-03-15` to freeze the clock for reproducible data.
+
+### Real mode notes
+
+* After OAuth the user's email is fetched from Google's `userinfo` endpoint and
+  shown in the header (best-effort; login still succeeds if it fails).
+* Identical report requests by the same user are cached in memory for
+  `REPORT_CACHE_TTL` seconds (default 300) to conserve GA Data API quota.
+  Cache entries are keyed by a hash of the user's credentials, never shared.
+* Set `SESSION_HTTPS_ONLY=true` in production so the session cookie is `Secure`.
+* `property_id` path parameters must be numeric; anything else is rejected with 422.
 
 ## Endpoints
 
@@ -50,6 +61,7 @@ Interactive docs: http://localhost:8000/docs
 uv run pytest                                   # ~200 tests, no network access
 uv run pytest --cov=app --cov-report=term-missing
 uv run mypy                                     # strict mode over app/ *and* tests/
+uv run ruff check . && uv run ruff format --check .
 ```
 
 The suite covers settings parsing, date resolution, the mock data generator
@@ -65,6 +77,7 @@ app/
 ├── main.py          ASGI entry point (uvicorn app.main:app)
 ├── factory.py       create_app(settings) — testable application factory
 ├── config.py        Settings loaded from the environment
+├── cache.py         TTL/LRU cache for Google report responses
 ├── dates.py         GA relative-date parsing, DateRange, previous period
 ├── mock_data.py     Deterministic mock GA generator (MockAnalyticsProvider)
 ├── providers.py     ReportProvider protocol, GoogleAnalyticsProvider, DI

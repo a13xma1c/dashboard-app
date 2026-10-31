@@ -2,18 +2,17 @@
 Google provider code paths, with the GA client and google-auth faked out.
 No network access is ever attempted.
 """
-from __future__ import annotations
 
-from fastapi import FastAPI
+from __future__ import annotations
 
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from google.api_core.exceptions import PermissionDenied
 from google.analytics.data_v1beta.types import Filter
+from google.api_core.exceptions import PermissionDenied
 
 from app.providers import (
     GoogleAnalyticsProvider,
@@ -33,7 +32,7 @@ def _fake_response(
         rows=[
             SimpleNamespace(
                 dimension_values=[SimpleNamespace(value=v) for v in r[: len(headers_dims)]],
-                metric_values=[SimpleNamespace(value=v) for v in r[len(headers_dims):]],
+                metric_values=[SimpleNamespace(value=v) for v in r[len(headers_dims) :]],
             )
             for r in rows
         ],
@@ -41,7 +40,9 @@ def _fake_response(
 
 
 def test_serialize_response_flattens_headers_and_rows() -> None:
-    response = _fake_response(["date"], ["sessions", "totalUsers"], [["20250301", "10", "8"], ["20250302", "12", "9"]])
+    response = _fake_response(
+        ["date"], ["sessions", "totalUsers"], [["20250301", "10", "8"], ["20250302", "12", "9"]]
+    )
     assert serialize_response(response) == {
         "headers": ["date", "sessions", "totalUsers"],
         "rows": [["20250301", "10", "8"], ["20250302", "12", "9"]],
@@ -100,6 +101,7 @@ def test_google_api_error_becomes_502() -> None:
 
 # ── Credentials ───────────────────────────────────────────────────────────────
 
+
 def test_credentials_without_refresh_token_are_not_refreshed() -> None:
     with patch("app.providers.Credentials") as creds_cls:
         creds_cls.return_value.refresh_token = None
@@ -136,6 +138,7 @@ def test_failed_refresh_raises_401() -> None:
 
 # ── Wiring through the real-mode app ──────────────────────────────────────────
 
+
 def test_real_mode_endpoint_uses_google_provider(real_app: FastAPI) -> None:
     """With mock mode off, the analytics router should hit the Google provider."""
     fake_provider = MagicMock()
@@ -145,7 +148,9 @@ def test_real_mode_endpoint_uses_google_provider(real_app: FastAPI) -> None:
     real_app.dependency_overrides[get_provider] = lambda: fake_provider
     client = TestClient(real_app)
 
-    body = client.get("/analytics/overview/99", params={"start_date": "2025-03-01", "end_date": "2025-03-01"}).json()
+    body = client.get(
+        "/analytics/overview/99", params={"start_date": "2025-03-01", "end_date": "2025-03-01"}
+    ).json()
     assert body == {"headers": ["date", "sessions"], "rows": [["20250301", "1"]]}
     kwargs = fake_provider.run_report.call_args.kwargs
     assert kwargs["dimensions"] == ["date"]
@@ -160,7 +165,10 @@ def test_real_mode_builds_credentials_from_session(real_app: FastAPI) -> None:
     # token exchange and log in through it.
     login = client.get("/auth/login", follow_redirects=False)
     state = login.headers["location"].split("state=")[1].split("&")[0]
-    with patch("app.routers.auth.build_flow") as build_flow:
+    with (
+        patch("app.routers.auth.build_flow") as build_flow,
+        patch("app.routers.auth.fetch_user_email", return_value=None),
+    ):
         build_flow.return_value.credentials = MagicMock(
             token="t", refresh_token=None, token_uri="u", client_id="c", client_secret="s", scopes=[]
         )
@@ -170,8 +178,10 @@ def test_real_mode_builds_credentials_from_session(real_app: FastAPI) -> None:
     fake_client = MagicMock()
     fake_client.run_report.return_value = _fake_response(["deviceCategory"], ["sessions"], [["mobile", "3"]])
 
-    with patch("app.providers.BetaAnalyticsDataClient", return_value=fake_client), \
-         patch("app.providers.BetaAnalyticsDataRestTransport"):
+    with (
+        patch("app.providers.BetaAnalyticsDataClient", return_value=fake_client),
+        patch("app.providers.BetaAnalyticsDataRestTransport"),
+    ):
         body = client.get("/analytics/devices/7").json()
 
     assert body["rows"] == [["mobile", "3"]]

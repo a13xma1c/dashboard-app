@@ -1,4 +1,5 @@
 """Tests for the deterministic mock GA data generator."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -26,6 +27,7 @@ def _sum(report: dict[str, Any], col: int) -> float:
 
 # ── Shape ─────────────────────────────────────────────────────────────────────
 
+
 def test_headers_match_requested_fields(provider: MockAnalyticsProvider) -> None:
     report = provider.run_report(PID, ["country"], ["sessions", "totalUsers"])
     assert report["headers"] == ["country", "sessions", "totalUsers"]
@@ -34,7 +36,9 @@ def test_headers_match_requested_fields(provider: MockAnalyticsProvider) -> None
         assert all(isinstance(cell, str) for cell in row)
 
 
-def test_date_dimension_yields_one_row_per_day_in_chronological_order(provider: MockAnalyticsProvider) -> None:
+def test_date_dimension_yields_one_row_per_day_in_chronological_order(
+    provider: MockAnalyticsProvider,
+) -> None:
     report = provider.run_report(PID, ["date"], ["sessions"], "2025-03-01", "2025-03-10")
     dates = [r[0] for r in report["rows"]]
     assert dates == [f"202503{d:02d}" for d in range(1, 11)]
@@ -96,6 +100,7 @@ def test_average_duration_is_plausible_seconds(provider: MockAnalyticsProvider) 
 
 # ── Determinism ───────────────────────────────────────────────────────────────
 
+
 def test_same_inputs_same_output(provider: MockAnalyticsProvider) -> None:
     a = provider.run_report(PID, ["date", "deviceCategory"], ["sessions", "engagementRate"])
     b = MockAnalyticsProvider(today=date(2025, 3, 15)).run_report(
@@ -118,6 +123,7 @@ def test_requesting_more_metrics_does_not_change_existing_values(provider: MockA
 
 # ── Internal consistency ──────────────────────────────────────────────────────
 
+
 def test_breakdowns_sum_to_time_series_total(provider: MockAnalyticsProvider) -> None:
     overview = provider.run_report(PID, ["date"], ["sessions"])
     total = _sum(overview, 1)
@@ -131,9 +137,7 @@ def test_filtered_time_series_matches_breakdown_row(provider: MockAnalyticsProvi
     devices = provider.run_report(PID, ["deviceCategory"], ["sessions"])
     mobile_total = next(int(r[1]) for r in devices["rows"] if r[0] == "mobile")
 
-    filtered = provider.run_report(
-        PID, ["date"], ["sessions"], dimension_filter=("deviceCategory", "mobile")
-    )
+    filtered = provider.run_report(PID, ["date"], ["sessions"], dimension_filter=("deviceCategory", "mobile"))
     assert abs(_sum(filtered, 1) - mobile_total) <= len(filtered["rows"])
 
 
@@ -170,6 +174,7 @@ def test_weekends_are_quieter_on_average(provider: MockAnalyticsProvider) -> Non
 
 # ── Derived dimensions ────────────────────────────────────────────────────────
 
+
 def test_day_of_week_uses_ga_convention(provider: MockAnalyticsProvider) -> None:
     # 2025-03-09 is a Sunday → GA dayOfWeek "0".
     report = provider.run_report(PID, ["dayOfWeek"], ["sessions"], "2025-03-09", "2025-03-09")
@@ -187,6 +192,7 @@ def test_hour_dimension_has_24_values(provider: MockAnalyticsProvider) -> None:
 
 
 # ── Validation ────────────────────────────────────────────────────────────────
+
 
 def test_unknown_dimension_rejected(provider: MockAnalyticsProvider) -> None:
     with pytest.raises(UnsupportedFieldError, match="dimension"):
@@ -217,6 +223,7 @@ def test_invalid_date_propagates(provider: MockAnalyticsProvider) -> None:
 
 # ── Metadata ──────────────────────────────────────────────────────────────────
 
+
 def test_metadata_covers_every_supported_field() -> None:
     meta = metadata()
     assert {d["name"] for d in meta["dimensions"]} == set(SUPPORTED_DIMENSIONS)
@@ -245,6 +252,7 @@ def test_every_metric_produces_numeric_values(provider: MockAnalyticsProvider, m
 
 
 # ── Hierarchy (city → country) ────────────────────────────────────────────────
+
 
 def test_cities_filtered_by_country_sum_to_country_total(provider: MockAnalyticsProvider) -> None:
     geo = provider.run_report(PID, ["country"], ["sessions"])
@@ -281,7 +289,9 @@ def test_child_filter_narrows_parent_dimension(provider: MockAnalyticsProvider) 
 def test_filter_on_same_dimension_returns_only_that_value(provider: MockAnalyticsProvider) -> None:
     full = provider.run_report(PID, ["deviceCategory"], ["sessions"])
     mobile = next(r for r in full["rows"] if r[0] == "mobile")
-    filtered = provider.run_report(PID, ["deviceCategory"], ["sessions"], dimension_filter=("deviceCategory", "mobile"))
+    filtered = provider.run_report(
+        PID, ["deviceCategory"], ["sessions"], dimension_filter=("deviceCategory", "mobile")
+    )
     assert filtered["rows"] == [mobile]
 
 

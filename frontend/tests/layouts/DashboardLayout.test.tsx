@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { Route, Routes } from "react-router-dom";
 import DashboardLayout from "@/layouts/DashboardLayout";
+import RequireProperty from "@/layouts/RequireProperty";
 import { NAV_ITEMS } from "@/layouts/nav";
 import { renderWithProviders } from "@tests/helpers/render";
 
@@ -10,8 +11,11 @@ function renderLayout(options: Parameters<typeof renderWithProviders>[1] = {}) {
   return renderWithProviders(
     <Routes>
       <Route path="/dashboard" element={<DashboardLayout />}>
-        <Route path="overview" element={<div>Overview content</div>} />
-        <Route path="audience" element={<div>Audience content</div>} />
+        <Route index element={<div>Index redirect</div>} />
+        <Route element={<RequireProperty />}>
+          <Route path="overview" element={<div>Overview content</div>} />
+          <Route path="audience" element={<div>Audience content</div>} />
+        </Route>
       </Route>
     </Routes>,
     { route: "/dashboard/overview", path: "*", ...options }
@@ -47,6 +51,12 @@ describe("DashboardLayout", () => {
     expect(screen.getByText("Property 42")).toBeInTheDocument();
   });
 
+  it("renders index/redirect routes even without a property", () => {
+    renderLayout({ propertyId: "", route: "/dashboard" });
+    expect(screen.getByText("Index redirect")).toBeInTheDocument();
+    expect(screen.queryByText("Connect a GA4 property")).not.toBeInTheDocument();
+  });
+
   it("shows demo badge, email and signs out", async () => {
     const logout = vi.fn(async () => {});
     renderLayout({ auth: { logout, email: "me@example.com", mockMode: true } });
@@ -62,10 +72,37 @@ describe("DashboardLayout", () => {
     expect(screen.queryByText(/In demo mode/)).not.toBeInTheDocument();
   });
 
+  it("sets the document title per page", async () => {
+    renderLayout();
+    expect(document.title).toBe("Overview · GA Dashboard");
+    await userEvent.click(screen.getByRole("link", { name: "Audience" }));
+    expect(document.title).toBe("Audience · GA Dashboard");
+  });
+
+  it("has a skip link and a refresh control", async () => {
+    const { queryClient } = renderLayout();
+    expect(screen.getByRole("link", { name: "Skip to content" })).toHaveAttribute("href", "#main-content");
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    await userEvent.click(screen.getByRole("button", { name: "Refresh data" }));
+    expect(invalidate).toHaveBeenCalledTimes(1);
+  });
+
   it("exposes the date range picker in the header", async () => {
     renderLayout({ dateRange: { start: "6daysAgo", end: "today" } });
     await userEvent.click(screen.getByRole("button", { name: /Last 7 days/ }));
     await userEvent.click(screen.getByRole("button", { name: "Last 90 days" }));
     expect(screen.getByRole("button", { name: /Last 90 days/ })).toBeInTheDocument();
+  });
+});
+
+describe("nav helpers", () => {
+  it("isPagePath recognises page routes only", async () => {
+    const { isPagePath } = await import("@/layouts/nav");
+    expect(isPagePath("/dashboard/overview")).toBe(true);
+    expect(isPagePath("/dashboard/explore/")).toBe(true);
+    expect(isPagePath("/dashboard")).toBe(false);
+    expect(isPagePath("/dashboard/")).toBe(false);
+    expect(isPagePath("/dashboard/nope")).toBe(false);
+    expect(isPagePath("/")).toBe(false);
   });
 });

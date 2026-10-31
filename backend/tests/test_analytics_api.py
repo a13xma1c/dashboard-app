@@ -1,11 +1,11 @@
 """Analytics endpoints, exercised through HTTP against the mock provider."""
-from __future__ import annotations
 
-from fastapi.testclient import TestClient
+from __future__ import annotations
 
 from datetime import date, timedelta
 
 import pytest
+from fastapi.testclient import TestClient
 
 from app.routers.analytics import SUMMARY_METRICS
 
@@ -30,8 +30,12 @@ STANDARD_REPORTS = {
 
 # ── Auth gate ─────────────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("path", [f"/analytics/{name}/{PID}" for name in STANDARD_REPORTS]
-                         + [f"/analytics/summary/{PID}", f"/analytics/custom/{PID}", "/analytics/metadata"])
+
+@pytest.mark.parametrize(
+    "path",
+    [f"/analytics/{name}/{PID}" for name in STANDARD_REPORTS]
+    + [f"/analytics/summary/{PID}", f"/analytics/custom/{PID}", "/analytics/metadata"],
+)
 def test_endpoints_require_authentication(client: TestClient, path: str) -> None:
     response = client.get(path)
     assert response.status_code == 401
@@ -39,6 +43,7 @@ def test_endpoints_require_authentication(client: TestClient, path: str) -> None
 
 
 # ── Standard reports ──────────────────────────────────────────────────────────
+
 
 @pytest.mark.parametrize("name, dimensions", STANDARD_REPORTS.items())
 def test_standard_report_shape(authed_client: TestClient, name: str, dimensions: list[str]) -> None:
@@ -116,6 +121,7 @@ def test_unknown_filter_dimension_returns_400(authed_client: TestClient) -> None
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 
+
 def test_summary_shape(authed_client: TestClient) -> None:
     body = authed_client.get(f"/analytics/summary/{PID}").json()
     assert body["metrics"] == SUMMARY_METRICS
@@ -152,6 +158,7 @@ def test_summary_with_relative_dates(authed_client: TestClient) -> None:
 
 
 # ── Custom ────────────────────────────────────────────────────────────────────
+
 
 def test_custom_default_is_sessions_by_date(authed_client: TestClient) -> None:
     body = authed_client.get(f"/analytics/custom/{PID}").json()
@@ -210,6 +217,7 @@ def test_custom_caps_field_count(authed_client: TestClient) -> None:
 
 # ── Metadata ──────────────────────────────────────────────────────────────────
 
+
 def test_metadata_lists_fields(authed_client: TestClient) -> None:
     body = authed_client.get("/analytics/metadata").json()
     dimension_names = {d["name"] for d in body["dimensions"]}
@@ -220,9 +228,49 @@ def test_metadata_lists_fields(authed_client: TestClient) -> None:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def test_totals_handles_empty_and_non_numeric_reports() -> None:
     from app.routers.analytics import _totals
 
-    assert _totals({"headers": ["sessions", "totalUsers"], "rows": []}) == {"sessions": 0.0, "totalUsers": 0.0}
+    assert _totals({"headers": ["sessions", "totalUsers"], "rows": []}) == {
+        "sessions": 0.0,
+        "totalUsers": 0.0,
+    }
     assert _totals({"headers": ["sessions"], "rows": [["n/a"]]}) == {"sessions": 0.0}
     assert _totals({"headers": ["sessions"], "rows": [["12"]]}) == {"sessions": 12.0}
+
+
+# ── Property ID validation ────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("bad_id", ["abc", "123abc", "12 34", "-1", "1" * 21])
+def test_non_numeric_property_id_is_rejected(authed_client: TestClient, bad_id: str) -> None:
+    response = authed_client.get(f"/analytics/overview/{bad_id}")
+    assert response.status_code == 422
+    response = authed_client.get(f"/analytics/summary/{bad_id}")
+    assert response.status_code == 422
+    response = authed_client.get(f"/analytics/custom/{bad_id}")
+    assert response.status_code == 422
+
+
+def test_numeric_property_id_is_accepted(authed_client: TestClient) -> None:
+    assert authed_client.get("/analytics/devices/1").status_code == 200
+    assert authed_client.get("/analytics/devices/98765432109876543210").status_code == 200
+
+
+# ── Frozen mock clock ─────────────────────────────────────────────────────────
+
+
+def test_mock_today_freezes_relative_dates() -> None:
+    from datetime import date
+
+    from app.config import Settings
+    from app.factory import create_app
+
+    app = create_app(Settings(session_secret="s", mock_mode=True, mock_today=date(2025, 3, 15)))
+    client = TestClient(app)
+    client.get("/auth/login", follow_redirects=False)
+    body = client.get(f"/analytics/overview/{PID}", params={"start_date": "2daysAgo"}).json()
+    assert [r[0] for r in body["rows"]] == ["20250313", "20250314", "20250315"]
+    summary = client.get(f"/analytics/summary/{PID}", params={"start_date": "6daysAgo"}).json()
+    assert summary["current_range"] == {"start_date": "2025-03-09", "end_date": "2025-03-15"}

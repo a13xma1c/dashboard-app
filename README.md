@@ -40,8 +40,10 @@ numbers are generated.
 | **Geography** | Top-countries bar (rank by sessions/users/new users), trend, countries & cities tables | Click a country → cities *in that country* and its trend |
 | **Explore** | Custom report builder over every supported dimension & metric | Pick fields, run, auto-chart (time series or ranked bars), export CSV |
 
-Global controls in the header — **property ID** and **date range** (presets or custom) — apply
-to every page and persist across reloads.
+Global controls in the header — **property ID**, **date range** (presets or custom) and a
+**Refresh** button showing when data was last updated — apply to every page. Property and date
+range are mirrored into the URL (`?property=…&start=…&end=…`), so any view is a shareable deep
+link, and persisted locally so they survive reloads.
 
 ---
 
@@ -75,6 +77,17 @@ API docs: http://localhost:8000/docs
 
 ---
 
+## Development shortcuts
+
+```bash
+make install      # uv sync + npm install
+make dev          # backend (mock mode) + frontend together
+make lint         # ruff · mypy · oxlint · tsc
+make test         # lint + backend + frontend + e2e
+```
+
+CI (`.github/workflows/ci.yml`) runs the same three stages on every push / PR.
+
 ## Testing
 
 ```bash
@@ -83,6 +96,9 @@ cd backend && uv run pytest --cov=app && uv run mypy
 
 # Frontend — Vitest + Testing Library, ~280 tests in frontend/tests (kept out of src/)
 cd frontend && npm test            # or: npm run test:coverage
+
+# End-to-end — Playwright drives Chromium against the real backend (mock mode) + Vite
+cd frontend && npx playwright install chromium && npm run test:e2e
 ```
 
 Both suites run against the deterministic mock generators, so results are stable and no
@@ -116,7 +132,9 @@ DashboardApp/
     │   ├── components/          # ui/, charts/, tables/
     │   ├── layouts/             # Sidebar + header shell
     │   └── pages/               # Overview, Audience, Acquisition, Content, Geography, Explore, Login
-    └── tests/                   # Vitest suite (mirrors src/), setup & helpers
+    ├── tests/                   # Vitest suite (mirrors src/), setup & helpers
+    ├── e2e/                     # Playwright end-to-end specs
+    └── playwright.config.ts     # Starts backend (GA_MOCK_MODE) + Vite for E2E runs
 ```
 
 ---
@@ -133,6 +151,9 @@ DashboardApp/
 | `SESSION_SECRET` | Random secret for signing session cookies (required unless mock mode) |
 | `FRONTEND_ORIGIN` | CORS origin of the React dev server (default `http://localhost:5173`) |
 | `CORS_ORIGINS` | Optional extra comma-separated origins |
+| `SESSION_HTTPS_ONLY` | `true` to mark the session cookie `Secure` (use behind HTTPS) |
+| `REPORT_CACHE_TTL` | Seconds to cache identical GA report requests per user (default `300`, `0` disables) |
+| `MOCK_TODAY` | `YYYY-MM-DD` to freeze "today" in mock mode for reproducible demos |
 
 ### Frontend
 

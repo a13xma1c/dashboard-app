@@ -5,6 +5,7 @@ FastAPI application factory.
 keeps this module importable without environment variables and lets tests spin
 up isolated instances (mock mode on/off, different origins, …).
 """
+
 from __future__ import annotations
 
 import logging
@@ -42,7 +43,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         SessionMiddleware,
         secret_key=settings.session_secret,
         same_site="lax",
-        https_only=False,
+        https_only=settings.session_https_only,
     )
 
     app.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -50,7 +51,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/health")
     def health() -> dict[str, object]:
-        return {"status": "ok", "mock_mode": settings.mock_mode}
+        return {"status": "ok", "version": app.version, "mock_mode": settings.mock_mode}
 
     if settings.mock_mode:
         logger.warning("GA_MOCK_MODE is enabled — serving generated analytics data.")

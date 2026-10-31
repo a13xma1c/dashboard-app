@@ -14,14 +14,15 @@ Design goals
 * **Same wire format as the real API** — ``{"headers": [...], "rows": [[...]]}``
   with metric values as strings, exactly like ``runReport``.
 """
+
 from __future__ import annotations
 
 import hashlib
 import random
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import date
 from functools import lru_cache
-from typing import Any, Callable
+from typing import Any
 
 from app.dates import DateRange, ga_date_string
 
@@ -48,71 +49,186 @@ CATEGORICAL_DIMENSIONS: dict[str, list[tuple[str, float]]] = {
     ],
     "deviceCategory": [("desktop", 55), ("mobile", 39), ("tablet", 6)],
     "country": [
-        ("United States", 34), ("United Kingdom", 11), ("Germany", 8), ("India", 8),
-        ("Canada", 6), ("France", 5), ("Australia", 4), ("Netherlands", 3),
-        ("Brazil", 3), ("Spain", 3), ("Japan", 2.5), ("Italy", 2), ("Sweden", 1.5),
-        ("Poland", 1.5), ("Mexico", 1.2), ("Switzerland", 1), ("Ireland", 1),
-        ("Singapore", 0.9), ("South Korea", 0.8), ("Belgium", 0.7),
-        ("Norway", 0.6), ("Denmark", 0.6), ("Argentina", 0.5), ("Austria", 0.5),
-        ("New Zealand", 0.4), ("Portugal", 0.4), ("Finland", 0.3), ("Israel", 0.3),
-        ("South Africa", 0.3), ("Turkey", 0.3),
+        ("United States", 34),
+        ("United Kingdom", 11),
+        ("Germany", 8),
+        ("India", 8),
+        ("Canada", 6),
+        ("France", 5),
+        ("Australia", 4),
+        ("Netherlands", 3),
+        ("Brazil", 3),
+        ("Spain", 3),
+        ("Japan", 2.5),
+        ("Italy", 2),
+        ("Sweden", 1.5),
+        ("Poland", 1.5),
+        ("Mexico", 1.2),
+        ("Switzerland", 1),
+        ("Ireland", 1),
+        ("Singapore", 0.9),
+        ("South Korea", 0.8),
+        ("Belgium", 0.7),
+        ("Norway", 0.6),
+        ("Denmark", 0.6),
+        ("Argentina", 0.5),
+        ("Austria", 0.5),
+        ("New Zealand", 0.4),
+        ("Portugal", 0.4),
+        ("Finland", 0.3),
+        ("Israel", 0.3),
+        ("South Africa", 0.3),
+        ("Turkey", 0.3),
     ],
     # Cities are a child of country — see CITY_COUNTRY / HIERARCHY below.
     "city": [],
     "pagePath": [
-        ("/", 30), ("/pricing", 9), ("/blog", 8), ("/docs", 7.5), ("/features", 6),
-        ("/blog/getting-started-with-analytics", 5), ("/docs/quickstart", 4.5),
-        ("/about", 4), ("/contact", 3), ("/signup", 3), ("/login", 2.8),
-        ("/blog/10-dashboard-design-tips", 2.5), ("/docs/api-reference", 2.5),
-        ("/integrations", 2), ("/customers", 1.8), ("/blog/measuring-engagement", 1.6),
-        ("/docs/authentication", 1.5), ("/careers", 1.2), ("/changelog", 1.1),
-        ("/docs/webhooks", 1), ("/blog/year-in-review", 0.9), ("/security", 0.8),
-        ("/privacy", 0.7), ("/terms", 0.5), ("/status", 0.4),
+        ("/", 30),
+        ("/pricing", 9),
+        ("/blog", 8),
+        ("/docs", 7.5),
+        ("/features", 6),
+        ("/blog/getting-started-with-analytics", 5),
+        ("/docs/quickstart", 4.5),
+        ("/about", 4),
+        ("/contact", 3),
+        ("/signup", 3),
+        ("/login", 2.8),
+        ("/blog/10-dashboard-design-tips", 2.5),
+        ("/docs/api-reference", 2.5),
+        ("/integrations", 2),
+        ("/customers", 1.8),
+        ("/blog/measuring-engagement", 1.6),
+        ("/docs/authentication", 1.5),
+        ("/careers", 1.2),
+        ("/changelog", 1.1),
+        ("/docs/webhooks", 1),
+        ("/blog/year-in-review", 0.9),
+        ("/security", 0.8),
+        ("/privacy", 0.7),
+        ("/terms", 0.5),
+        ("/status", 0.4),
     ],
     "landingPage": [
-        ("/", 42), ("/blog/getting-started-with-analytics", 9), ("/pricing", 8),
-        ("/docs", 7), ("/blog", 6), ("/features", 5), ("/docs/quickstart", 4.5),
-        ("/blog/10-dashboard-design-tips", 4), ("/signup", 3), ("/about", 2.5),
-        ("/integrations", 2), ("/blog/measuring-engagement", 1.8),
-        ("/docs/api-reference", 1.5), ("/customers", 1.2), ("/careers", 1),
+        ("/", 42),
+        ("/blog/getting-started-with-analytics", 9),
+        ("/pricing", 8),
+        ("/docs", 7),
+        ("/blog", 6),
+        ("/features", 5),
+        ("/docs/quickstart", 4.5),
+        ("/blog/10-dashboard-design-tips", 4),
+        ("/signup", 3),
+        ("/about", 2.5),
+        ("/integrations", 2),
+        ("/blog/measuring-engagement", 1.8),
+        ("/docs/api-reference", 1.5),
+        ("/customers", 1.2),
+        ("/careers", 1),
         ("/changelog", 0.8),
     ],
     "browser": [
-        ("Chrome", 58), ("Safari", 22), ("Firefox", 7), ("Edge", 7),
-        ("Samsung Internet", 3), ("Opera", 1.5), ("Android Webview", 1),
+        ("Chrome", 58),
+        ("Safari", 22),
+        ("Firefox", 7),
+        ("Edge", 7),
+        ("Samsung Internet", 3),
+        ("Opera", 1.5),
+        ("Android Webview", 1),
         ("Safari (in-app)", 0.5),
     ],
     "operatingSystem": [
-        ("Windows", 38), ("iOS", 22), ("Android", 18), ("Macintosh", 16),
-        ("Linux", 4), ("Chrome OS", 2),
+        ("Windows", 38),
+        ("iOS", 22),
+        ("Android", 18),
+        ("Macintosh", 16),
+        ("Linux", 4),
+        ("Chrome OS", 2),
     ],
     "sessionSource": [
-        ("google", 46), ("(direct)", 24), ("bing", 5), ("facebook.com", 4),
-        ("t.co", 3), ("linkedin.com", 3), ("newsletter", 3), ("duckduckgo", 2.5),
-        ("github.com", 2.5), ("reddit.com", 2), ("youtube.com", 1.5),
-        ("yahoo", 1.5), ("producthunt.com", 1), ("news.ycombinator.com", 1),
+        ("google", 46),
+        ("(direct)", 24),
+        ("bing", 5),
+        ("facebook.com", 4),
+        ("t.co", 3),
+        ("linkedin.com", 3),
+        ("newsletter", 3),
+        ("duckduckgo", 2.5),
+        ("github.com", 2.5),
+        ("reddit.com", 2),
+        ("youtube.com", 1.5),
+        ("yahoo", 1.5),
+        ("producthunt.com", 1),
+        ("news.ycombinator.com", 1),
     ],
     "sessionMedium": [
-        ("organic", 50), ("(none)", 24), ("referral", 12), ("cpc", 6),
-        ("email", 4), ("social", 4),
+        ("organic", 50),
+        ("(none)", 24),
+        ("referral", 12),
+        ("cpc", 6),
+        ("email", 4),
+        ("social", 4),
     ],
     "newVsReturning": [("new", 58), ("returning", 40), ("(not set)", 2)],
     "eventName": [
-        ("page_view", 40), ("session_start", 15), ("user_engagement", 14),
-        ("scroll", 12), ("first_visit", 8), ("click", 6), ("view_search_results", 2),
-        ("form_submit", 1.5), ("sign_up", 0.9), ("file_download", 0.4), ("purchase", 0.2),
+        ("page_view", 40),
+        ("session_start", 15),
+        ("user_engagement", 14),
+        ("scroll", 12),
+        ("first_visit", 8),
+        ("click", 6),
+        ("view_search_results", 2),
+        ("form_submit", 1.5),
+        ("sign_up", 0.9),
+        ("file_download", 0.4),
+        ("purchase", 0.2),
     ],
     "language": [
-        ("en-us", 50), ("en-gb", 14), ("de-de", 8), ("fr-fr", 5), ("es-es", 4),
-        ("pt-br", 3), ("en-in", 3), ("nl-nl", 3), ("ja-jp", 2), ("it-it", 2),
-        ("sv-se", 1.5), ("pl-pl", 1.5), ("en-ca", 1.5), ("en-au", 1.5),
+        ("en-us", 50),
+        ("en-gb", 14),
+        ("de-de", 8),
+        ("fr-fr", 5),
+        ("es-es", 4),
+        ("pt-br", 3),
+        ("en-in", 3),
+        ("nl-nl", 3),
+        ("ja-jp", 2),
+        ("it-it", 2),
+        ("sv-se", 1.5),
+        ("pl-pl", 1.5),
+        ("en-ca", 1.5),
+        ("en-au", 1.5),
     ],
     # Diurnal curve — quiet overnight, peaks late morning and mid-afternoon.
     "hour": [
         (f"{h:02d}", w)
         for h, w in enumerate(
-            [1.2, 0.9, 0.7, 0.6, 0.6, 0.8, 1.4, 2.4, 3.8, 5.2, 6.0, 6.2,
-             5.8, 6.1, 6.3, 6.0, 5.4, 4.6, 3.9, 3.6, 3.4, 3.0, 2.4, 1.7]
+            [
+                1.2,
+                0.9,
+                0.7,
+                0.6,
+                0.6,
+                0.8,
+                1.4,
+                2.4,
+                3.8,
+                5.2,
+                6.0,
+                6.2,
+                5.8,
+                6.1,
+                6.3,
+                6.0,
+                5.4,
+                4.6,
+                3.9,
+                3.6,
+                3.4,
+                3.0,
+                2.4,
+                1.7,
+            ]
         )
     ],
 }
@@ -123,27 +239,60 @@ CATEGORICAL_DIMENSIONS: dict[str, list[tuple[str, float]]] = {
 
 CITY_COUNTRY: list[tuple[str, str, float]] = [
     # (city, country, weight within the country)
-    ("New York", "United States", 9), ("San Francisco", "United States", 5),
-    ("Los Angeles", "United States", 4), ("Chicago", "United States", 3),
-    ("Seattle", "United States", 2.5), ("Austin", "United States", 2),
-    ("Boston", "United States", 2), ("Denver", "United States", 1), ("(not set)", "United States", 4),
-    ("London", "United Kingdom", 8), ("Manchester", "United Kingdom", 2), ("Edinburgh", "United Kingdom", 1),
-    ("Berlin", "Germany", 4), ("Munich", "Germany", 1.8), ("Hamburg", "Germany", 1.2),
-    ("Bengaluru", "India", 3), ("Mumbai", "India", 2), ("Delhi", "India", 1.8), ("Hyderabad", "India", 1.2),
-    ("Toronto", "Canada", 3.5), ("Vancouver", "Canada", 1.1), ("Montreal", "Canada", 1),
-    ("Paris", "France", 3), ("Lyon", "France", 0.8),
-    ("Sydney", "Australia", 2.5), ("Melbourne", "Australia", 1.2),
-    ("Amsterdam", "Netherlands", 2.5), ("Rotterdam", "Netherlands", 0.6),
-    ("São Paulo", "Brazil", 1.8), ("Rio de Janeiro", "Brazil", 0.9),
-    ("Madrid", "Spain", 1.6), ("Barcelona", "Spain", 1.3),
-    ("Tokyo", "Japan", 1.5), ("Osaka", "Japan", 0.5),
-    ("Milan", "Italy", 1), ("Rome", "Italy", 0.9),
-    ("Stockholm", "Sweden", 1.2), ("Warsaw", "Poland", 1.2), ("Mexico City", "Mexico", 1),
-    ("Zurich", "Switzerland", 0.8), ("Dublin", "Ireland", 1.4), ("Singapore", "Singapore", 0.9),
-    ("Seoul", "South Korea", 0.8), ("Brussels", "Belgium", 0.6), ("Oslo", "Norway", 0.6),
-    ("Copenhagen", "Denmark", 0.6), ("Buenos Aires", "Argentina", 0.5), ("Vienna", "Austria", 0.5),
-    ("Auckland", "New Zealand", 0.4), ("Lisbon", "Portugal", 0.4), ("Helsinki", "Finland", 0.3),
-    ("Tel Aviv", "Israel", 0.3), ("Cape Town", "South Africa", 0.3), ("Istanbul", "Turkey", 0.3),
+    ("New York", "United States", 9),
+    ("San Francisco", "United States", 5),
+    ("Los Angeles", "United States", 4),
+    ("Chicago", "United States", 3),
+    ("Seattle", "United States", 2.5),
+    ("Austin", "United States", 2),
+    ("Boston", "United States", 2),
+    ("Denver", "United States", 1),
+    ("(not set)", "United States", 4),
+    ("London", "United Kingdom", 8),
+    ("Manchester", "United Kingdom", 2),
+    ("Edinburgh", "United Kingdom", 1),
+    ("Berlin", "Germany", 4),
+    ("Munich", "Germany", 1.8),
+    ("Hamburg", "Germany", 1.2),
+    ("Bengaluru", "India", 3),
+    ("Mumbai", "India", 2),
+    ("Delhi", "India", 1.8),
+    ("Hyderabad", "India", 1.2),
+    ("Toronto", "Canada", 3.5),
+    ("Vancouver", "Canada", 1.1),
+    ("Montreal", "Canada", 1),
+    ("Paris", "France", 3),
+    ("Lyon", "France", 0.8),
+    ("Sydney", "Australia", 2.5),
+    ("Melbourne", "Australia", 1.2),
+    ("Amsterdam", "Netherlands", 2.5),
+    ("Rotterdam", "Netherlands", 0.6),
+    ("São Paulo", "Brazil", 1.8),
+    ("Rio de Janeiro", "Brazil", 0.9),
+    ("Madrid", "Spain", 1.6),
+    ("Barcelona", "Spain", 1.3),
+    ("Tokyo", "Japan", 1.5),
+    ("Osaka", "Japan", 0.5),
+    ("Milan", "Italy", 1),
+    ("Rome", "Italy", 0.9),
+    ("Stockholm", "Sweden", 1.2),
+    ("Warsaw", "Poland", 1.2),
+    ("Mexico City", "Mexico", 1),
+    ("Zurich", "Switzerland", 0.8),
+    ("Dublin", "Ireland", 1.4),
+    ("Singapore", "Singapore", 0.9),
+    ("Seoul", "South Korea", 0.8),
+    ("Brussels", "Belgium", 0.6),
+    ("Oslo", "Norway", 0.6),
+    ("Copenhagen", "Denmark", 0.6),
+    ("Buenos Aires", "Argentina", 0.5),
+    ("Vienna", "Austria", 0.5),
+    ("Auckland", "New Zealand", 0.4),
+    ("Lisbon", "Portugal", 0.4),
+    ("Helsinki", "Finland", 0.3),
+    ("Tel Aviv", "Israel", 0.3),
+    ("Cape Town", "South Africa", 0.3),
+    ("Istanbul", "Turkey", 0.3),
 ]
 
 # child dimension -> parent dimension
@@ -173,10 +322,18 @@ DERIVED_DIMENSIONS: dict[str, Callable[[date], str]] = {
 
 # Metrics that are simple sums over days / rows.
 ADDITIVE_METRICS = (
-    "sessions", "totalUsers", "activeUsers", "newUsers", "screenPageViews",
-    "engagedSessions", "eventCount", "conversions", "keyEvents",
+    "sessions",
+    "totalUsers",
+    "activeUsers",
+    "newUsers",
+    "screenPageViews",
+    "engagedSessions",
+    "eventCount",
+    "conversions",
+    "keyEvents",
     "userEngagementDuration",
 )
+
 
 def _safe_div(a: float, b: float) -> float:
     return a / b if b else 0.0
@@ -243,6 +400,7 @@ _TREND_ORIGIN = date(2024, 1, 1)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _rng(*parts: object) -> random.Random:
     """A ``random.Random`` seeded stably from the given parts (hash() is salted per process)."""
     key = "|".join(str(p) for p in parts).encode()
@@ -256,7 +414,7 @@ def _property_profile(property_id: str) -> dict[str, float]:
     return {
         "base_sessions": r.uniform(600, 4000),
         "weekend_factor": r.uniform(0.6, 0.8),
-        "yearly_growth": r.uniform(-0.15, 0.35),   # relative change per 365 days
+        "yearly_growth": r.uniform(-0.15, 0.35),  # relative change per 365 days
         "users_ratio": r.uniform(0.72, 0.9),
         "new_ratio": r.uniform(0.45, 0.72),
         "views_per_session": r.uniform(1.7, 3.2),
@@ -281,7 +439,9 @@ def _daily_sessions(property_id: str, day: date) -> float:
     return max(p["base_sessions"] * weekly * max(trend, 0.2) * noise * spike, 1.0)
 
 
-def _normalised(property_id: str, dimension: str, day: date, values: list[tuple[str, float]], salt: str = "") -> dict[str, float]:
+def _normalised(
+    property_id: str, dimension: str, day: date, values: list[tuple[str, float]], salt: str = ""
+) -> dict[str, float]:
     prop_r = _rng("share", property_id, dimension, salt)
     day_r = _rng("share", property_id, dimension, salt, day.isoformat())
     weighted: dict[str, float] = {}
@@ -304,7 +464,7 @@ def _shares(property_id: str, dimension: str, day: date) -> dict[str, float]:
     if dimension in HIERARCHY:
         parent_shares = _shares(property_id, HIERARCHY[dimension], day)
         result: dict[str, float] = {}
-        for parent_value, children in CHILDREN_OF[dimension].items():
+        for parent_value in CHILDREN_OF[dimension]:
             within = _conditional_shares(property_id, dimension, day, parent_value)
             for child, share in within.items():
                 result[child] = parent_shares.get(parent_value, 0.0) * share
@@ -323,12 +483,13 @@ def _conditional_shares(property_id: str, dimension: str, day: date, parent_valu
 
 def _format_metric(name: str, value: float) -> str:
     if name in ADDITIVE_METRICS:
-        return str(int(round(value)))
+        return str(round(value))
     # Derived metrics are floats; GA returns them with plenty of precision.
     return f"{value:.6f}".rstrip("0").rstrip(".") if value else "0"
 
 
 # ── Provider ──────────────────────────────────────────────────────────────────
+
 
 class MockAnalyticsProvider:
     """Drop-in stand-in for the GA Data API used when ``GA_MOCK_MODE`` is on."""
@@ -353,7 +514,6 @@ class MockAnalyticsProvider:
         date_range = DateRange.parse(start_date, end_date, self._today)
 
         categorical = [d for d in dimensions if d in CATEGORICAL_DIMENSIONS]
-        derived = [d for d in dimensions if d in DERIVED_DIMENSIONS]
         filter_dim, filter_value = dimension_filter or (None, None)
 
         # Accumulate additive totals keyed by the tuple of dimension values.
@@ -371,14 +531,15 @@ class MockAnalyticsProvider:
                     continue
 
             for combo in self._combos(categorical, filter_dim, filter_value):
-                chosen = dict(zip(categorical, combo))
+                chosen = dict(zip(categorical, combo, strict=True))
                 sessions = day_sessions
                 for dim, value in chosen.items():
-                    sessions *= self._share_for(property_id, dim, value, day, chosen, filter_dim, filter_value)
+                    sessions *= self._share_for(
+                        property_id, dim, value, day, chosen, filter_dim, filter_value
+                    )
 
                 key = tuple(
-                    DERIVED_DIMENSIONS[d](day) if d in DERIVED_DIMENSIONS
-                    else combo[categorical.index(d)]
+                    DERIVED_DIMENSIONS[d](day) if d in DERIVED_DIMENSIONS else combo[categorical.index(d)]
                     for d in dimensions
                 )
                 row_totals = totals.setdefault(key, {m: 0.0 for m in ADDITIVE_METRICS})
@@ -449,10 +610,10 @@ class MockAnalyticsProvider:
         combos: list[tuple[str, ...]] = [()]
         for dim in categorical:
             values = cls._values_for(dim, filter_dim, filter_value)
-            combos = [c + (v,) for c in combos for v in values]
+            combos = [(*c, v) for c in combos for v in values]
 
         for combo in combos:
-            chosen = dict(zip(categorical, combo))
+            chosen = dict(zip(categorical, combo, strict=True))
             if all(
                 PARENT_OF[child].get(value) == chosen[parent]
                 for child, parent in HIERARCHY.items()
@@ -481,9 +642,12 @@ class MockAnalyticsProvider:
           parent's share has already been accounted for.
         * otherwise → the plain (hierarchy-inclusive) share.
         """
-        if filter_dim is not None and filter_value is not None:
-            if dim == filter_dim or HIERARCHY.get(filter_dim) == dim:
-                return 1.0
+        if (
+            filter_dim is not None
+            and filter_value is not None
+            and (dim == filter_dim or HIERARCHY.get(filter_dim) == dim)
+        ):
+            return 1.0
         parent = HIERARCHY.get(dim)
         if parent is not None:
             parent_value = chosen.get(parent)
@@ -494,9 +658,7 @@ class MockAnalyticsProvider:
         return _shares(property_id, dim, day).get(value, 0.0)
 
     @staticmethod
-    def _additive_for(
-        property_id: str, key: tuple[str, ...], day: date, sessions: float
-    ) -> dict[str, float]:
+    def _additive_for(property_id: str, key: tuple[str, ...], day: date, sessions: float) -> dict[str, float]:
         p = _property_profile(property_id)
         r = _rng("row", property_id, key, day.isoformat())
 
@@ -535,10 +697,7 @@ def metadata() -> dict[str, list[dict[str, str]]]:
     """Catalogue of supported fields, for the frontend report builder."""
     return {
         "dimensions": [
-            {"name": name, "label": DIMENSION_LABELS.get(name, name)}
-            for name in DIMENSION_LABELS
+            {"name": name, "label": DIMENSION_LABELS.get(name, name)} for name in DIMENSION_LABELS
         ],
-        "metrics": [
-            {"name": name, **info} for name, info in METRIC_INFO.items()
-        ],
+        "metrics": [{"name": name, **info} for name, info in METRIC_INFO.items()],
     }

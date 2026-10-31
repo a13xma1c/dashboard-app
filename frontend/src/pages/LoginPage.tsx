@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import styles from "./LoginPage.module.css";
@@ -8,6 +8,10 @@ export default function LoginPage() {
   const [searchParams] = useSearchParams();
   const [busy, setBusy] = useState(false);
   const oauthError = searchParams.get("error");
+
+  useEffect(() => {
+    document.title = "Sign in · GA Dashboard";
+  }, []);
 
   const handleLogin = async () => {
     setBusy(true);
