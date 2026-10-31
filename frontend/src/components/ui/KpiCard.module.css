@@ -1,0 +1,75 @@
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: var(--shadow);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  position: relative;
+  min-width: 0;
+}
+
+button.card:hover {
+  border-color: var(--border-strong);
+}
+
+.active {
+  border-color: var(--accent, var(--primary));
+  box-shadow: 0 0 0 1px var(--accent, var(--primary)), var(--shadow);
+}
+
+.active::before {
+  content: "";
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: 0;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: var(--accent, var(--primary));
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.up { color: var(--success); }
+.down { color: var(--danger); }
+.flat { color: var(--text-subtle); }
+
+.previous {
+  font-weight: 400;
+  color: var(--text-subtle);
+}
+
+.skeleton {
+  height: 28px;
+  width: 60%;
+  border-radius: 4px;
+  background: #eef0f2;
+}

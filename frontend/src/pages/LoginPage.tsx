@@ -1,8 +1,25 @@
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
 import styles from "./LoginPage.module.css";
 
 export default function LoginPage() {
-  const handleLogin = () => {
-    window.location.href = "http://localhost:8000/auth/login";
+  const { login, mockMode } = useAuth();
+  const [searchParams] = useSearchParams();
+  const [busy, setBusy] = useState(false);
+  const oauthError = searchParams.get("error");
+
+  useEffect(() => {
+    document.title = "Sign in · GA Dashboard";
+  }, []);
+
+  const handleLogin = async () => {
+    setBusy(true);
+    try {
+      await login();
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -10,11 +27,18 @@ export default function LoginPage() {
       <div className={styles.card}>
         <h1 className={styles.title}>GA Dashboard</h1>
         <p className={styles.subtitle}>
-          Sign in with Google to connect your Analytics account
+          {mockMode
+            ? "Demo mode is on — sign in to explore the dashboards with generated data."
+            : "Sign in with Google to connect your Analytics account"}
         </p>
-        <button className={styles.button} onClick={handleLogin}>
+        {oauthError && (
+          <p className={styles.error} role="alert">
+            Sign-in was cancelled or failed ({oauthError}). Please try again.
+          </p>
+        )}
+        <button className={styles.button} onClick={() => void handleLogin()} disabled={busy}>
           <GoogleIcon />
-          Sign in with Google
+          {mockMode ? "Continue with demo data" : "Sign in with Google"}
         </button>
       </div>
     </div>
@@ -23,7 +47,7 @@ export default function LoginPage() {
 
 function GoogleIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" style={{ marginRight: 10 }}>
+    <svg width="20" height="20" viewBox="0 0 24 24" style={{ marginRight: 10 }} aria-hidden="true">
       <path
         fill="#4285F4"
         d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"

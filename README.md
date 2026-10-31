@@ -1,11 +1,49 @@
 # Google Analytics Dashboard
 
-A full-stack dashboard app that connects to Google Analytics 4 via OAuth 2.0 and renders interactive charts.
+A full-stack analytics dashboard that connects to Google Analytics 4 via OAuth 2.0 — or runs
+entirely on realistic **mock data** so you can develop, demo and test without a Google account.
 
 ```
-backend/   Python FastAPI — OAuth + GA Data API v1
-frontend/  React + TypeScript + Vite — charts with Recharts
+backend/   Python FastAPI — OAuth + GA Data API v1 (+ deterministic mock provider)
+frontend/  React + TypeScript + Vite — six interactive dashboard pages (Recharts, TanStack Query)
 ```
+
+---
+
+## Quick start (mock data, no Google setup)
+
+```bash
+# Terminal 1 — API with generated data
+cd backend && uv sync && GA_MOCK_MODE=true uv run uvicorn app.main:app --reload --port 8000
+
+# Terminal 2 — UI
+cd frontend && npm install && npm run dev
+```
+
+Open http://localhost:5173, click **Continue with demo data**, enter any property ID
+(e.g. `123456789`) and explore. A **Demo data** badge in the sidebar reminds you the
+numbers are generated.
+
+> Want to skip the backend entirely? `VITE_MOCK_API=true npm run dev` serves the same
+> mock data from inside the browser.
+
+---
+
+## Dashboards
+
+| Page | What's on it | Interactions |
+|------|--------------|--------------|
+| **Overview** | KPI cards with period-over-period deltas, trend chart, channel & device donuts | Click a KPI to plot it · line/area/bar toggle · brush to zoom · click a donut slice to filter the whole page |
+| **Audience** | Devices, new vs returning, browsers, operating systems, hour-of-day, users over time | Click any segment/bar — every other widget is cross-filtered to it |
+| **Acquisition** | Stacked channels-over-time, channel mix, channels table, source/medium, landing pages | Click a channel (pie, legend or table row) to focus everything on it |
+| **Content** | Trend with metric chips, top pages, events, landing pages | Click a page row → its trend and events; search/sort/paginate tables |
+| **Geography** | Top-countries bar (rank by sessions/users/new users), trend, countries & cities tables | Click a country → cities *in that country* and its trend |
+| **Explore** | Custom report builder over every supported dimension & metric | Pick fields, run, auto-chart (time series or ranked bars), export CSV |
+
+Global controls in the header — **property ID**, **date range** (presets or custom) and a
+**Refresh** button showing when data was last updated — apply to every page. Property and date
+range are mirrored into the URL (`?property=…&start=…&end=…`), so any view is a shareable deep
+link, and persisted locally so they survive reloads.
 
 ---
 
@@ -19,66 +57,52 @@ frontend/  React + TypeScript + Vite — charts with Recharts
 
 ---
 
-## 1 — Google Cloud Setup
+## Connecting to real Google Analytics
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/) → **APIs & Services → Library** and enable the **Google Analytics Data API**.
-2. Go to **APIs & Services → Credentials → Create Credentials → OAuth 2.0 Client ID**.
-   - Application type: **Web application**
-   - Authorized redirect URIs: `http://localhost:8000/auth/callback`
-3. Copy the **Client ID** and **Client Secret** — you'll need them below.
+1. In [Google Cloud Console](https://console.cloud.google.com/) enable the **Google Analytics Data API**
+   and create an **OAuth 2.0 Client ID** (Web application) with redirect URI
+   `http://localhost:8000/auth/callback`.
+2. Configure the backend:
+   ```bash
+   cd backend
+   cp .env.example .env
+   # set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SESSION_SECRET and GA_MOCK_MODE=false
+   uv run python -c "import secrets; print(secrets.token_hex(32))"   # → SESSION_SECRET
+   uv run uvicorn app.main:app --reload --port 8000
+   ```
+3. Start the frontend (`npm run dev`), click **Sign in with Google**, authorise, and enter
+   your **GA4 Property ID** (Google Analytics → Admin → Property Settings).
 
----
-
-## 2 — Backend setup
-
-```bash
-cd backend
-
-# Install dependencies (creates .venv automatically)
-uv sync
-
-# Configure environment
-cp .env.example .env
-# Edit .env and fill in GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SESSION_SECRET
-```
-
-Generate a session secret:
-```bash
-uv run python -c "import secrets; print(secrets.token_hex(32))"
-```
-
-Start the backend:
-```bash
-uv run uvicorn app.main:app --reload --port 8000
-```
-
-API docs available at http://localhost:8000/docs
+API docs: http://localhost:8000/docs
 
 ---
 
-## 3 — Frontend setup
+## Development shortcuts
 
 ```bash
-cd frontend
-npm install
-npm run dev
+make install      # uv sync + npm install
+make dev          # backend (mock mode) + frontend together
+make lint         # ruff · mypy · oxlint · tsc
+make test         # lint + backend + frontend + e2e
 ```
 
-App runs at http://localhost:5173
+CI (`.github/workflows/ci.yml`) runs the same three stages on every push / PR.
 
----
+## Testing
 
-## 4 — Usage
+```bash
+# Backend — pytest, ~200 typed tests, 100% coverage, no network; mypy --strict over app + tests
+cd backend && uv run pytest --cov=app && uv run mypy
 
-1. Open http://localhost:5173 and click **Sign in with Google**.
-2. Authorize access to your Google Analytics account.
-3. After redirect, enter your **GA4 Property ID** (found in Google Analytics → Admin → Property Settings → Property ID).
-4. Dashboards load automatically:
-   - **Sessions / Users / Pageviews** — daily line chart (last 30 days)
-   - **Traffic Sources** — pie chart by channel group
-   - **Devices** — pie chart by device category
-   - **Top Pages** — table of top 20 pages by pageviews
-   - **Sessions by Country** — table of top 20 countries
+# Frontend — Vitest + Testing Library, ~280 tests in frontend/tests (kept out of src/)
+cd frontend && npm test            # or: npm run test:coverage
+
+# End-to-end — Playwright drives Chromium against the real backend (mock mode) + Vite
+cd frontend && npx playwright install chromium && npm run test:e2e
+```
+
+Both suites run against the deterministic mock generators, so results are stable and no
+Google credentials are ever needed. See `backend/README.md` and `frontend/README.md` for details.
 
 ---
 
@@ -88,39 +112,52 @@ App runs at http://localhost:5173
 DashboardApp/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py              # FastAPI app, CORS, session middleware
-│   │   ├── oauth.py             # Google OAuth 2.0 flow helpers
-│   │   └── routers/
-│   │       ├── auth.py          # /auth/login, /auth/callback, /auth/me, /auth/logout
-│   │       └── analytics.py     # /analytics/* GA Data API endpoints
-│   ├── pyproject.toml           # uv project + dependencies
-│   ├── uv.lock                  # locked dependency graph
-│   └── .env.example
+│   │   ├── main.py              # ASGI entry point
+│   │   ├── factory.py           # create_app(settings)
+│   │   ├── config.py            # Settings from env (GA_MOCK_MODE, secrets, origins)
+│   │   ├── dates.py             # GA date syntax, DateRange, previous period
+│   │   ├── mock_data.py         # Deterministic mock GA generator
+│   │   ├── providers.py         # ReportProvider: Google + Mock, dependency injection
+│   │   ├── oauth.py             # Google OAuth flow
+│   │   ├── schemas.py           # Response models
+│   │   └── routers/             # /auth/*, /analytics/*
+│   ├── tests/                   # pytest suite
+│   └── pyproject.toml
 └── frontend/
-    └── src/
-        ├── api/
-        │   ├── client.ts        # Axios instance
-        │   └── analytics.ts     # API call functions + types
-        ├── context/
-        │   └── AuthContext.tsx  # Auth state provider
-        ├── pages/
-        │   ├── LoginPage.tsx
-        │   └── DashboardPage.tsx
-        └── components/
-            ├── OverviewChart.tsx   # Line chart (sessions/users/pageviews)
-            ├── PieWidget.tsx       # Pie chart (traffic sources, devices)
-            ├── TopPagesTable.tsx   # Top pages table
-            └── GeoTable.tsx        # Geo breakdown table
+    ├── src/
+    │   ├── api/                 # Axios client + typed API (live or mock)
+    │   ├── mocks/               # In-browser mock GA generator + mock API
+    │   ├── lib/                 # format / report / dates / csv helpers
+    │   ├── context/, hooks/     # Auth, dashboard state, data hooks, drill-down
+    │   ├── components/          # ui/, charts/, tables/
+    │   ├── layouts/             # Sidebar + header shell
+    │   └── pages/               # Overview, Audience, Acquisition, Content, Geography, Explore, Login
+    ├── tests/                   # Vitest suite (mirrors src/), setup & helpers
+    ├── e2e/                     # Playwright end-to-end specs
+    └── playwright.config.ts     # Starts backend (GA_MOCK_MODE) + Vite for E2E runs
 ```
 
 ---
 
-## Environment variables reference
+## Environment variables
+
+### Backend
 
 | Variable | Description |
 |----------|-------------|
-| `GOOGLE_CLIENT_ID` | OAuth 2.0 client ID from Google Cloud Console |
-| `GOOGLE_CLIENT_SECRET` | OAuth 2.0 client secret |
-| `GOOGLE_REDIRECT_URI` | Must match redirect URI registered in Google Cloud (default: `http://localhost:8000/auth/callback`) |
-| `SESSION_SECRET` | Random secret used to sign session cookies |
-| `FRONTEND_ORIGIN` | CORS allowed origin for the React dev server (default: `http://localhost:5173`) |
+| `GA_MOCK_MODE` | `true` → serve generated data and skip Google OAuth |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | OAuth 2.0 client (required unless mock mode) |
+| `GOOGLE_REDIRECT_URI` | Must match the Cloud Console redirect URI (default `http://localhost:8000/auth/callback`) |
+| `SESSION_SECRET` | Random secret for signing session cookies (required unless mock mode) |
+| `FRONTEND_ORIGIN` | CORS origin of the React dev server (default `http://localhost:5173`) |
+| `CORS_ORIGINS` | Optional extra comma-separated origins |
+| `SESSION_HTTPS_ONLY` | `true` to mark the session cookie `Secure` (use behind HTTPS) |
+| `REPORT_CACHE_TTL` | Seconds to cache identical GA report requests per user (default `300`, `0` disables) |
+| `MOCK_TODAY` | `YYYY-MM-DD` to freeze "today" in mock mode for reproducible demos |
+
+### Frontend
+
+| Variable | Description |
+|----------|-------------|
+| `VITE_API_URL` | Backend base URL (default `http://localhost:8000`) |
+| `VITE_MOCK_API` | `true` → answer all API calls in the browser with mock data |
